@@ -17,6 +17,8 @@
       "migrations_dir": "../../migrations/cloud"
     }
   ],
+  // truvapark.com.tr Cloudflare'de Active olana kadar panel workers.dev adresinden de açılır.
+  "workers_dev": true,
   "routes": [{ "pattern": "panel.truvapark.com.tr", "custom_domain": true }],
   "observability": { "enabled": true }
   // Gizli anahtarlar (wrangler secret put ile):
