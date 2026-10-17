@@ -121,7 +121,7 @@ app.get('/api/sync/pull', async (c) => {
   return c.json(body);
 });
 
-// ---------- Uzaktan yönetim paneli (dunyasalon.com) ----------
+// ---------- Uzaktan yönetim paneli (panel.truvapark.com.tr) ----------
 
 const admin = new Hono<{ Bindings: Bindings }>();
 admin.use('*', async (c, next) => {

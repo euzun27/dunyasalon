@@ -2,11 +2,11 @@
 
 Düğün salonu için **barkodlu kantin satışı**, **stok takibi**, **düğün (organizasyon) hesapları** ve **rezervasyon** yazılımı.
 Önce-çevrimdışı (offline-first) hibrit mimari: salondaki Windows mini PC ana işlem merkezidir, internet kesilse de
-salon ağı (LAN) üzerinden çalışmaya devam eder. Bulut (Cloudflare Workers + D1, `dunyasalon.com`) uzaktan izleme,
+salon ağı (LAN) üzerinden çalışmaya devam eder. Bulut (Cloudflare Workers + D1, `panel.truvapark.com.tr`) uzaktan izleme,
 merkezi rapor ve rezervasyon talebi içindir.
 
 ```
-Cloudflare (dunyasalon.com)                    Salon mini PC (Windows)
+Cloudflare (panel.truvapark.com.tr)                    Salon mini PC (Windows)
 ┌─────────────────────────────┐   HTTPS        ┌──────────────────────────────────┐
 │ Hono Worker + Static Assets │◀──push/pull───▶│ Node.js + Hono yerel API         │
 │ D1: olay günlüğü + raporlar │   (outbox)     │ SQLite (WAL) · yetkili kaynak    │
@@ -76,7 +76,7 @@ tests/            pos · reservations · synchronization (kabul testleri)
 - Her iş kaydı aynı transaction içinde `sync_outbox`'a olay olarak yazılır; internet yoksa olaylar kuyrukta bekler
 - Bağlantı gelince sırayla `/api/sync/push`; bulut `event_id` ile tekilleştirir ve olayı + projeksiyonları **tek D1 `batch()`** ile atomik yazar
 - Bulutta stok bakiyesi kopyalanmaz, hareketlerden türetilir
-- Uzaktan (dunyasalon.com) yalnızca **rezervasyon talebi** alınır; `/api/sync/pull` ile salona "talep" olarak düşer, kesinleştirme resepsiyonda yapılır
+- Uzaktan (panel.truvapark.com.tr) yalnızca **rezervasyon talebi** alınır; `/api/sync/pull` ile salona "talep" olarak düşer, kesinleştirme resepsiyonda yapılır
 - Üstel geri çekilmeyle tekrar deneme, durum ekranı (bekleyen / hatalı / son eşitleme)
 
 **Diğer**: kullanıcılar ve roller (admin, kasiyer, resepsiyon, muhasebe), oturum belirteçleri (scrypt şifre), denetim kaydı (`audit_logs`), günlük özet raporu, tutarlı çevrimiçi yedekleme + bütünlük kontrolü.
@@ -114,7 +114,7 @@ npm run build -w @dunyatek/web && npx wrangler dev --port 8788
 2. Yönetici PowerShell'de, depo klasöründen:
    ```powershell
    powershell -ExecutionPolicy Bypass -File .\scripts\install-windows.ps1 `
-     -AdminPassword "GucluBirSifre" -CloudUrl "https://dunyasalon.com" -CloudToken "<SYNC_TOKEN>"
+     -AdminPassword "GucluBirSifre" -CloudUrl "https://panel.truvapark.com.tr" -CloudToken "<SYNC_TOKEN>"
    ```
    Betik `C:\DUNYATEK\WeddingERP\{app,data,backups,logs,config}` klasörlerini kurar, uygulamayı derler,
    yönetici kullanıcıyı oluşturur ve şunları kaydeder:
@@ -130,7 +130,9 @@ Geri yükleme: `scripts\restore.ps1 -BackupFile C:\DUNYATEK\WeddingERP\backups\w
 
 SQLite dosyası ağ paylaşımına konmaz; diğer bilgisayarlar veritabanına değil, yalnızca API'ye bağlanır.
 
-## Cloudflare kurulumu (dunyasalon.com)
+## Cloudflare kurulumu (panel.truvapark.com.tr)
+
+Ön koşul: `truvapark.com.tr` alan adı Cloudflare hesabına eklenmiş ve durumu **Active** olmalı (nameserver'lar Cloudflare'e yönlendirilmiş). `panel` alt alan adının DNS kaydını `npm run deploy` kendisi oluşturur. Adres değişecekse `apps/cloud-worker/wrangler.jsonc` içindeki `routes` satırını düzenleyin.
 
 ```bash
 cd apps/cloud-worker
@@ -142,7 +144,7 @@ npx wrangler secret put ADMIN_TOKEN           # uzaktan panel anahtarı
 npm run deploy                                # web arayüzünü derler ve Worker'ı yayınlar
 ```
 
-`dunyasalon.com` bulut panelinde yönetim anahtarıyla giriş yapılır. Gerçek kullanımda paneli ayrıca
+`panel.truvapark.com.tr` bulut panelinde yönetim anahtarıyla giriş yapılır. Gerçek kullanımda paneli ayrıca
 **Cloudflare Access** (e-posta ile tek kullanımlık kod) arkasına almanızı öneririm.
 
 ## Kabul testleri

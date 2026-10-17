@@ -2,7 +2,7 @@ import { api } from '../services/api.js';
 import { esc, tl, qty, today, dateTR, dateTimeTR, STATUS_LABELS, METHOD_LABELS } from '../services/format.js';
 import { h, modal, toast, errorToast, emptyRow } from '../ui.js';
 
-/** dunyasalon.com uzaktan yönetim paneli: senkronize verileri gösterir, yalnızca rezervasyon TALEBİ alır. */
+/** panel.truvapark.com.tr uzaktan yönetim paneli: senkronize verileri gösterir, yalnızca rezervasyon TALEBİ alır. */
 export async function renderCloud(root) {
   root.append(
     h(`
