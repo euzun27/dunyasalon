@@ -1,0 +1,26 @@
+{
+  "name": "dunyatek-wedding-erp",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22.16"
+  },
+  "scripts": {
+    "dev:local": "npm run dev -w @dunyatek/local-server",
+    "dev:web": "npm run dev -w @dunyatek/web",
+    "dev:cloud": "npm run dev -w @dunyatek/cloud-worker",
+    "build": "npm run build -w @dunyatek/web && npm run build -w @dunyatek/local-server",
+    "typecheck": "tsc -p tsconfig.json && tsc -p apps/cloud-worker/tsconfig.json",
+    "test": "node --import tsx --test --test-reporter=spec \"tests/**/*.test.ts\""
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.23.0",
+    "typescript": "^5.9.0"
+  }
+}
