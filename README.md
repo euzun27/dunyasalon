@@ -90,6 +90,7 @@ Gereksinim: Node.js 24 LTS (en az 22.16). Ek bir yerel derleme gerekmez; SQLite 
 ```bash
 npm install
 ADMIN_PASSWORD=admin123 npm run seed -w @dunyatek/local-server -- --demo   # yönetici + örnek salon/ürünler
+npm run sifre -- admin "YeniSifre"   # unutulan şifreyi sıfırlar; parametresiz çalışırsa kullanıcı adlarını listeler
 npm run dev:local     # yerel API  → http://localhost:8787
 npm run dev:web       # arayüz     → http://localhost:5173 (/api yerel sunucuya yönlenir)
 npm test              # kabul testleri
