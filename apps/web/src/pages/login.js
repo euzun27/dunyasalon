@@ -1,13 +1,21 @@
 import { api, session } from '../services/api.js';
 import { h, errorToast } from '../ui.js';
 import { esc } from '../services/format.js';
+import { icon } from '../icons.js';
 
 export function renderLogin(root, { mode, onLogin }) {
   const cloud = mode === 'cloud';
   const el = h(`
     <div class="login">
+      <div class="login-side">
+        <div>
+          <h1>Salonunuzun tamamı tek ekranda</h1>
+          <p>Rezervasyon takvimi, sözleşme, tahsilat ve ödeme planı, personel, gelir-gider ve barkodlu kantin satışı.</p>
+          <ul><li>İnternet kesilse de salon ağında çalışır</li><li>Bulutla otomatik eşitlenir</li><li>WhatsApp ile müşteri bilgilendirme</li></ul>
+        </div>
+      </div>
       <form class="card login-card">
-        <div class="brand big"><span>💍</span><div><strong>DUNYATEK</strong><small>${cloud ? 'Bulut Yönetim Paneli' : 'Wedding ERP · Salon'}</small></div></div>
+        <div class="brand big"><span class="brand-mark">${icon('ring', 26)}</span><div><strong>DUNYATEK</strong><small>${cloud ? 'Bulut Yönetim Paneli' : 'Wedding ERP · Salon'}</small></div></div>
         ${
           cloud
             ? `<label>Yönetim anahtarı<input name="token" type="password" required autocomplete="current-password" /></label>`

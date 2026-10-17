@@ -58,4 +58,6 @@ export interface ReservationInput {
   deposit_kurus?: number;
   status?: ReservationStatus;
   notes?: string | null;
+  option_until?: string | null;
+  discount_kurus?: number;
 }

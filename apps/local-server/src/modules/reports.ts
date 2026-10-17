@@ -43,3 +43,45 @@ export function dailySummary(db: DB, date: string) {
     low_stock: lowStock,
   };
 }
+
+/** Yıllık rapor: ay ay etkinlik, sözleşme tutarı, tahsilat, kantin ve gider; etkinlik türü ve salon dağılımı. */
+export function yearlyReport(db: DB, year: string) {
+  if (!/^\d{4}$/.test(year)) throw new Error('Geçersiz yıl');
+  const months = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`);
+  const byMonth = (rows: Array<{ m: string; v: number }>) => {
+    const map = Object.fromEntries(rows.map((r) => [r.m, r.v]));
+    return months.map((m) => map[m] ?? 0);
+  };
+  const ITEMS = '(SELECT COALESCE(SUM(i.total_kurus), 0) FROM reservation_items i WHERE i.reservation_id = r.id)';
+  const events = byMonth(all(db, `SELECT substr(event_date,1,7) AS m, COUNT(*) AS v FROM reservations r WHERE status IN ('kesin','tamamlandi') AND substr(event_date,1,4) = ? GROUP BY m`, year));
+  const contract = byMonth(all(db, `SELECT substr(event_date,1,7) AS m, SUM(r.price_kurus - r.discount_kurus + ${ITEMS}) AS v FROM reservations r WHERE status IN ('kesin','tamamlandi') AND substr(event_date,1,4) = ? GROUP BY m`, year));
+  const collected = byMonth(all(db, `SELECT substr(created_at,1,7) AS m, SUM(CASE kind WHEN 'iade' THEN -amount_kurus ELSE amount_kurus END) AS v FROM reservation_payments WHERE cancelled_at IS NULL AND substr(created_at,1,4) = ? GROUP BY m`, year));
+  const pos = byMonth(all(db, `SELECT substr(created_at,1,7) AS m, SUM(total_kurus) AS v FROM pos_sales WHERE status = 'tamamlandi' AND substr(created_at,1,4) = ? GROUP BY m`, year));
+  const otherIncome = byMonth(all(db, `SELECT substr(entry_date,1,7) AS m, SUM(amount_kurus) AS v FROM finance_entries WHERE type = 'gelir' AND deleted_at IS NULL AND substr(entry_date,1,4) = ? GROUP BY m`, year));
+  const expense = byMonth(all(db, `SELECT substr(entry_date,1,7) AS m, SUM(amount_kurus) AS v FROM finance_entries WHERE type = 'gider' AND deleted_at IS NULL AND substr(entry_date,1,4) = ? GROUP BY m`, year));
+  const wages = byMonth(all(db, `SELECT substr(r.event_date,1,7) AS m, SUM(es.wage_kurus) AS v FROM event_staff es JOIN reservations r ON r.id = es.reservation_id WHERE es.deleted_at IS NULL AND r.status != 'iptal' AND substr(r.event_date,1,4) = ? GROUP BY m`, year));
+  const byType = all<{ event_type: string; count: number; total: number }>(db, `SELECT event_type, COUNT(*) AS count, SUM(r.price_kurus - r.discount_kurus + ${ITEMS}) AS total FROM reservations r WHERE status IN ('kesin','tamamlandi') AND substr(event_date,1,4) = ? GROUP BY event_type ORDER BY count DESC`, year);
+  const byHall = all<{ hall_name: string; count: number; total: number }>(db, `SELECT h.name AS hall_name, COUNT(*) AS count, SUM(r.price_kurus - r.discount_kurus + ${ITEMS}) AS total FROM reservations r JOIN halls h ON h.id = r.hall_id WHERE r.status IN ('kesin','tamamlandi') AND substr(r.event_date,1,4) = ? GROUP BY h.id ORDER BY count DESC`, year);
+  const byWeekday = all<{ wd: string; count: number }>(db, `SELECT strftime('%w', event_date) AS wd, COUNT(*) AS count FROM reservations WHERE status IN ('kesin','tamamlandi') AND substr(event_date,1,4) = ? GROUP BY wd`, year);
+  const cancelled = one<{ n: number }>(db, "SELECT COUNT(*) AS n FROM reservations WHERE status = 'iptal' AND substr(event_date,1,4) = ?", year)!.n;
+  const sum = (a: number[]) => a.reduce((s, v) => s + v, 0);
+  const expenseTotal = months.map((_, i) => expense[i]! + wages[i]!);
+  return {
+    year,
+    months,
+    series: { events, contract, collected, pos, other_income: otherIncome, expense: expenseTotal },
+    totals: {
+      events: sum(events),
+      contract_kurus: sum(contract),
+      collected_kurus: sum(collected),
+      pos_kurus: sum(pos),
+      other_income_kurus: sum(otherIncome),
+      expense_kurus: sum(expenseTotal),
+      net_kurus: sum(collected) + sum(pos) + sum(otherIncome) - sum(expenseTotal),
+      cancelled,
+    },
+    by_type: byType,
+    by_hall: byHall,
+    by_weekday: byWeekday,
+  };
+}

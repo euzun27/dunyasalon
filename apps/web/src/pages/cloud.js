@@ -8,7 +8,7 @@ export async function renderCloud(root) {
     h(`
     <div class="page">
       <header class="page-head">
-        <h1>Bulut Özeti</h1>
+        
         <div class="actions"><input type="date" id="date" value="${today()}" /><button class="btn primary" id="request">+ Rezervasyon talebi</button></div>
       </header>
       <div class="notice">Bu panel salondaki sunucudan eşitlenen verileri gösterir. Rezervasyonlar burada yalnızca talep olarak alınır; salonda onaylanınca kesinleşir.</div>

@@ -7,7 +7,7 @@ export async function renderDashboard(root, { user }) {
     h(`
     <div class="page">
       <header class="page-head">
-        <h1>Günlük Özet</h1>
+        
         <div class="actions"><input type="date" id="date" value="${today()}" /></div>
       </header>
       <div class="stats" id="stats"></div>

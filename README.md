@@ -34,7 +34,25 @@ scripts/          install-windows.ps1 · backup.ps1 · restore.ps1 · health-che
 tests/            pos · reservations · synchronization (kabul testleri)
 ```
 
-## Neler hazır (v0.1)
+## Neler hazır (v0.2)
+
+![Ana sayfa](docs/ekran-goruntuleri/10-ana-sayfa.png)
+
+**Salon yönetimi (v0.2, salon-takip.com karşılaştırmasıyla eklendi)**
+- **Ana sayfa**: bugünkü ve 30 günlük organizasyonlar, aylık sözleşme / tahsilat / gider / açık alacak kartları, otomatik hatırlatmalar (opsiyon bitişi, geciken vade, bakiye açık, davetli sayısı eksik, kapatılmamış etkinlik), son tahsilatlar
+- **Rezervasyon ayrıntısı**: salon ücreti + menü/hizmet kalemleri − indirim = toplam; tahsil edilen, kalan, geciken; opsiyon bitiş tarihi
+  - Menü & hizmet kalemleri (sabit veya kişi başı; kişi başında adet davetli sayısından gelir)
+  - Tahsilatlar: kapora / ara ödeme / kalan / iade, nakit-kart-havale, sıra numaralı **makbuz yazdırma**, gerekçeli iptal
+  - Ödeme planı (taksitler, otomatik plan, gecikenler kırmızı), personel ataması, görüşme notları, gider ve organizasyon kârlılığı
+  - **Sözleşme yazdırma** (A4: taraflar, etkinlik, kalemler, ödeme planı, maddeler, imza alanları)
+  - **WhatsApp / SMS mesajı**: düzenlenebilir şablonlarla (onay, opsiyon, ödeme, etkinlik hatırlatma, makbuz) tek tıkla
+- **Müşteri kartı**: tüm organizasyonları, toplam/ödenen/kalan, adres ve T.C. kimlik no, notlar, gönderilen mesajlar
+- **Menü & hizmetler**: paket, menü ve ek hizmet tanımları
+- **Personel**: görev, yevmiye, etkinlik programı, aylık hakediş
+- **Gelir & gider**: dönem özeti (rezervasyon tahsilatı + kantin + diğer gelir − gider − personel), kategori dağılımı
+- **Raporlar**: yıllık aylık gelir/gider grafiği, etkinlik sayısı, haftanın günleri, etkinlik türü ve salon kırılımı
+- **Ayarlar**: işletme bilgileri, sözleşme maddeleri, mesaj şablonları, kullanıcı ekleme/rol/şifre/pasifleştirme, salonlar
+- Yeni tablolar da buluta eşitlenir (`row.upserted` olayı)
 
 **Kantin POS**
 - Barkod okuyucu ile satış (okuyucu klavye gibi çalışır; `3*barkod` = 3 adet), ürün adıyla arama, kategori kutucukları

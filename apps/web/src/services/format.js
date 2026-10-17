@@ -54,3 +54,27 @@ export const STATUS_LABELS = {
 };
 
 export const METHOD_LABELS = { nakit: 'Nakit', kart: 'Kart', dugun_hesabi: 'Düğün hesabı' };
+
+export const EVENT_TYPES = { dugun: 'Düğün', nisan: 'Nişan', kina: 'Kına', sunnet: 'Sünnet', diger: 'Diğer' };
+export const PAYMENT_KINDS = { kapora: 'Kapora', ara_odeme: 'Ara ödeme', kalan: 'Kalan ödeme', iade: 'İade' };
+export const PAY_METHODS = { nakit: 'Nakit', kart: 'Kredi kartı', havale: 'Havale / EFT' };
+export const SERVICE_KINDS = { paket: 'Paket', menu: 'Menü', hizmet: 'Hizmet' };
+export const PRICING = { sabit: 'Sabit fiyat', kisi_basi: 'Kişi başı' };
+
+/** Kuruşu form alanına yazılacak "1250,50" biçimine çevirir (boşsa ''). */
+export function toInput(kurus) {
+  if (!kurus) return '';
+  const s = (kurus / 100).toFixed(2).replace('.', ',');
+  return s.endsWith(',00') ? s.slice(0, -3) : s;
+}
+
+export function dateShort(iso) {
+  if (!iso) return '';
+  const [y, m, d] = iso.slice(0, 10).split('-');
+  return `${d}.${m}.${y}`;
+}
+
+export function daysUntil(date) {
+  const t = new Date(`${today()}T00:00:00`);
+  return Math.round((new Date(`${date}T00:00:00`) - t) / 86400000);
+}

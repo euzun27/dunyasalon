@@ -3,13 +3,20 @@ import { getCookie } from 'hono/cookie';
 import type { Role } from '@dunyatek/shared';
 import type { Config } from './config.ts';
 import type { DB } from './database/db.ts';
-import { AuthError, assertRole, createUser, login, logout, userFromToken, type SessionUser } from './modules/auth.ts';
+import { AuthError, assertRole, createUser, listUsers, login, logout, updateUser, userFromToken, type SessionUser } from './modules/auth.ts';
 import * as products from './modules/products.ts';
 import * as inventory from './modules/inventory.ts';
 import * as pos from './modules/pos.ts';
 import * as accounts from './modules/event-accounts.ts';
 import * as reservations from './modules/reservations.ts';
-import { dailySummary } from './modules/reports.ts';
+import { dailySummary, yearlyReport } from './modules/reports.ts';
+import * as services from './modules/services.ts';
+import * as details from './modules/reservation-details.ts';
+import * as customers from './modules/customers.ts';
+import * as finance from './modules/finance.ts';
+import * as staff from './modules/staff.ts';
+import * as settings from './modules/settings.ts';
+import { dashboard } from './modules/dashboard.ts';
 import type { SyncEngine } from './sync/engine.ts';
 
 type Env = { Variables: { user: SessionUser } };
@@ -59,9 +66,17 @@ export function createApp(db: DB, config: Config, sync?: SyncEngine) {
     if (header?.startsWith('Bearer ')) logout(db, header.slice(7));
     return c.json({ ok: true });
   });
+  api.get('/users', (c) => {
+    role(c, 'admin');
+    return c.json(listUsers(db));
+  });
   api.post('/users', async (c) => {
     role(c, 'admin');
     return c.json(createUser(db, await c.req.json()), 201);
+  });
+  api.put('/users/:id', async (c) => {
+    const u = role(c, 'admin');
+    return c.json(updateUser(db, c.req.param('id'), await c.req.json(), u.id));
   });
 
   // --- Ürünler ve stok ---
@@ -142,7 +157,14 @@ export function createApp(db: DB, config: Config, sync?: SyncEngine) {
     return c.json(reservations.createHall(db, await c.req.json(), u.id), 201);
   });
   api.get('/reservations', (c) =>
-    c.json(reservations.listReservations(db, { from: c.req.query('from'), to: c.req.query('to'), hall_id: c.req.query('hall_id') })),
+    c.json(
+      reservations.listReservations(db, {
+        from: c.req.query('from'),
+        to: c.req.query('to'),
+        hall_id: c.req.query('hall_id'),
+        status: c.req.query('status'),
+      }),
+    ),
   );
   api.get('/reservations/availability', (c) =>
     c.json(
@@ -174,7 +196,136 @@ export function createApp(db: DB, config: Config, sync?: SyncEngine) {
     return c.json(reservations.setReservationStatus(db, c.req.param('id'), body.status, resCtx(u)));
   });
 
+  // --- Rezervasyon ayrıntıları: menü/hizmet, tahsilat, ödeme planı, personel ---
+  api.get('/reservations/:id/detail', (c) => c.json(details.reservationDetail(db, c.req.param('id'))));
+  api.post('/reservations/:id/items', async (c) => {
+    const u = role(c, 'resepsiyon');
+    return c.json(details.addItem(db, c.req.param('id'), await c.req.json(), u.id), 201);
+  });
+  api.put('/reservation-items/:id', async (c) => {
+    const u = role(c, 'resepsiyon');
+    const body = await c.req.json<{ qty: number }>();
+    return c.json(details.updateItemQty(db, c.req.param('id'), body.qty, u.id));
+  });
+  api.delete('/reservation-items/:id', (c) => {
+    const u = role(c, 'resepsiyon');
+    details.removeItem(db, c.req.param('id'), u.id);
+    return c.json({ ok: true });
+  });
+  api.post('/reservations/:id/payments', async (c) => {
+    const u = role(c, 'resepsiyon', 'muhasebe');
+    return c.json(details.addPayment(db, c.req.param('id'), await c.req.json(), u.id), 201);
+  });
+  api.get('/reservation-payments/:id', (c) => c.json(details.getPayment(db, c.req.param('id'))));
+  api.post('/reservation-payments/:id/cancel', async (c) => {
+    const u = role(c, 'muhasebe');
+    const body = await c.req.json<{ reason: string }>();
+    return c.json(details.cancelPayment(db, c.req.param('id'), body.reason, u.id));
+  });
+  api.post('/reservations/:id/installments', async (c) => {
+    const u = role(c, 'resepsiyon', 'muhasebe');
+    return c.json(details.addInstallment(db, c.req.param('id'), await c.req.json(), u.id), 201);
+  });
+  api.delete('/reservation-installments/:id', (c) => {
+    const u = role(c, 'resepsiyon', 'muhasebe');
+    details.removeInstallment(db, c.req.param('id'), u.id);
+    return c.json({ ok: true });
+  });
+  api.post('/reservations/:id/staff', async (c) => {
+    const u = role(c, 'resepsiyon');
+    return c.json({ id: details.assignStaff(db, c.req.param('id'), await c.req.json(), u.id) }, 201);
+  });
+  api.delete('/event-staff/:id', (c) => {
+    const u = role(c, 'resepsiyon');
+    details.unassignStaff(db, c.req.param('id'), u.id);
+    return c.json({ ok: true });
+  });
+  api.get('/reservations/:id/message', (c) =>
+    c.json(settings.composeMessage(db, c.req.param('id'), c.req.query('template') ?? 'rezervasyon_onay', {
+      tutar: c.req.query('tutar') ?? '',
+      makbuz: c.req.query('makbuz') ?? '',
+    })),
+  );
+  api.post('/reservations/:id/message-log', async (c) => {
+    const body = await c.req.json<{ channel: 'whatsapp' | 'sms'; body: string }>();
+    settings.logMessage(db, { reservation_id: c.req.param('id'), ...body }, c.get('user').id);
+    return c.json({ ok: true }, 201);
+  });
+
+  // --- Müşteriler ---
+  api.get('/customers', (c) => c.json(customers.listCustomers(db, c.req.query('q'))));
+  api.get('/customers/:id', (c) => c.json(customers.getCustomer(db, c.req.param('id'))));
+  api.put('/customers/:id', async (c) => {
+    const u = role(c, 'resepsiyon');
+    return c.json(customers.updateCustomer(db, c.req.param('id'), await c.req.json(), u.id));
+  });
+  api.post('/customer-notes', async (c) => {
+    const u = role(c, 'resepsiyon', 'muhasebe');
+    return c.json({ id: customers.addNote(db, await c.req.json(), u.id) }, 201);
+  });
+
+  // --- Menü / hizmet / paket ---
+  api.get('/services', (c) => c.json(services.listServices(db, c.req.query('all') === '1')));
+  api.post('/services', async (c) => {
+    const u = role(c, 'muhasebe');
+    return c.json(services.saveService(db, null, await c.req.json(), u.id), 201);
+  });
+  api.put('/services/:id', async (c) => {
+    const u = role(c, 'muhasebe');
+    return c.json(services.saveService(db, c.req.param('id'), await c.req.json(), u.id));
+  });
+
+  // --- Personel ---
+  api.get('/staff', (c) => c.json(staff.listStaff(db, c.req.query('all') === '1')));
+  api.get('/staff/:id/schedule', (c) => c.json(staff.staffSchedule(db, c.req.param('id'))));
+  api.post('/staff', async (c) => {
+    const u = role(c, 'muhasebe');
+    return c.json(staff.saveStaff(db, null, await c.req.json(), u.id), 201);
+  });
+  api.put('/staff/:id', async (c) => {
+    const u = role(c, 'muhasebe');
+    return c.json(staff.saveStaff(db, c.req.param('id'), await c.req.json(), u.id));
+  });
+
+  // --- Gelir / gider ---
+  api.get('/finance/categories', (c) => c.json({ gider: finance.EXPENSE_CATEGORIES, gelir: finance.INCOME_CATEGORIES }));
+  api.get('/finance/entries', (c) => {
+    role(c, 'muhasebe');
+    return c.json(finance.listEntries(db, c.req.query('from') ?? '', c.req.query('to') ?? ''));
+  });
+  api.post('/finance/entries', async (c) => {
+    const u = role(c, 'muhasebe');
+    return c.json(finance.addEntry(db, await c.req.json(), u.id), 201);
+  });
+  api.delete('/finance/entries/:id', (c) => {
+    const u = role(c, 'muhasebe');
+    finance.deleteEntry(db, c.req.param('id'), u.id);
+    return c.json({ ok: true });
+  });
+  api.get('/finance/summary', (c) => {
+    role(c, 'muhasebe');
+    return c.json(finance.financeSummary(db, c.req.query('from') ?? '', c.req.query('to') ?? ''));
+  });
+
+  // --- Ana sayfa, ayarlar ---
+  api.get('/dashboard', (c) => c.json(dashboard(db, c.req.query('today') ?? undefined)));
+  api.get('/settings', (c) => c.json(settings.getSettings(db)));
+  api.put('/settings', async (c) => {
+    const u = role(c, 'admin');
+    return c.json(settings.saveSettings(db, await c.req.json(), u.id));
+  });
+  api.get('/message-templates', (c) => c.json(settings.listTemplates(db)));
+  api.put('/message-templates/:key', async (c) => {
+    const u = role(c, 'admin');
+    const body = await c.req.json<{ body: string }>();
+    return c.json(settings.saveTemplate(db, c.req.param('key'), body.body, u.id));
+  });
+
   // --- Raporlar ve senkronizasyon ---
+  api.get('/reports/yearly', (c) => {
+    role(c, 'muhasebe');
+    return c.json(yearlyReport(db, c.req.query('year') ?? new Date().toISOString().slice(0, 4)));
+  });
   api.get('/reports/daily', (c) => {
     role(c, 'muhasebe', 'kasiyer');
     return c.json(dailySummary(db, c.req.query('date') ?? new Date().toISOString().slice(0, 10)));

@@ -1,5 +1,5 @@
 import { newId, nowIso } from '@dunyatek/shared';
-import type { SyncEventType } from '@dunyatek/sync-protocol';
+import type { SyncEventType, SyncedTable } from '@dunyatek/sync-protocol';
 import { run, type DB } from './db.ts';
 
 /** Çağıran transaction'ın içinde kullanılmalıdır: iş kaydı ve olay birlikte yazılır. */
@@ -36,4 +36,10 @@ export function audit(
     detail === undefined ? null : JSON.stringify(detail),
     nowIso(),
   );
+}
+
+/** Genel modül kaydını (ör. tahsilat, personel) senkron kuyruğuna ekler. Transaction içinde çağrılır. */
+export function publishRow(db: DB, table: SyncedTable, id: string): void {
+  const row = db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(id);
+  if (row) enqueue(db, 'row.upserted', id, { table, row });
 }

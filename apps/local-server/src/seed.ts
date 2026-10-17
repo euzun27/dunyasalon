@@ -9,6 +9,8 @@ import { createUser } from './modules/auth.ts';
 import { createProduct } from './modules/products.ts';
 import { recordManualMovement } from './modules/inventory.ts';
 import { createHall } from './modules/reservations.ts';
+import { saveService } from './modules/services.ts';
+import { saveStaff } from './modules/staff.ts';
 
 const config = loadConfig();
 const db = openDatabase(config.dbPath);
@@ -42,6 +44,23 @@ if (process.argv.includes('--demo')) {
     const p = createProduct(db, { barcode, name, category, price_kurus: price, vat_rate: 10 }, null);
     recordManualMovement(db, { product_id: p.id, type: 'giris', qty: toQty(100), note: 'Açılış stoku' }, null);
   }
-  console.log('Örnek salon ve ürünler eklendi.');
+  if (!one(db, 'SELECT id FROM services')) {
+    const services = [
+      ['Altın Paket (salon + yemek + süsleme)', 'paket', 'kisi_basi', 120000, 'Salon, akşam yemeği, masa süslemesi, ses-ışık'],
+      ['Akşam yemeği menüsü', 'menu', 'kisi_basi', 65000, 'Çorba, ara sıcak, et yemeği, pilav, salata, tatlı'],
+      ['Kokteyl menüsü', 'menu', 'kisi_basi', 35000, 'Kuru pasta, kanepe, meşrubat'],
+      ['Düğün pastası (5 kat)', 'hizmet', 'sabit', 750000, null],
+      ['Gelin masası süsleme', 'hizmet', 'sabit', 500000, null],
+      ['Orkestra / DJ', 'hizmet', 'sabit', 1500000, null],
+      ['Fotoğraf ve video', 'hizmet', 'sabit', 1200000, null],
+    ] as const;
+    for (const [name, kind, pricing, price_kurus, description] of services) {
+      saveService(db, null, { name, kind, pricing, price_kurus, description }, null);
+    }
+    for (const [full_name, title, wage] of [['Ahmet Yılmaz', 'Şef garson', 150000], ['Mehmet Kaya', 'Garson', 100000], ['Ayşe Demir', 'Aşçı', 180000]] as const) {
+      saveStaff(db, null, { full_name, title, daily_wage_kurus: wage }, null);
+    }
+  }
+  console.log('Örnek salon, ürün, menü/hizmet ve personel eklendi.');
 }
 db.close();

@@ -9,13 +9,13 @@ export async function renderAccounts(root, { user }) {
     h(`
     <div class="page">
       <header class="page-head">
-        <h1>Düğün Hesapları</h1>
+        
         <div class="actions">
           <select id="filter"><option value="acik">Açık hesaplar</option><option value="kapali">Kapalı hesaplar</option><option value="">Tümü</option></select>
           ${canPost ? '<button class="btn primary" id="new">+ Hesap aç</button>' : ''}
         </div>
       </header>
-      <div class="split">
+      <div class="split accounts-split">
         <div class="card"><table class="table">
           <thead><tr><th>Hesap</th><th>Tarih</th><th class="num">Borç</th><th class="num">Tahsilat</th><th class="num">Bakiye</th></tr></thead>
           <tbody id="rows"></tbody>

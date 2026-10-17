@@ -21,7 +21,22 @@ export type SyncEventType =
   | 'event_account.upserted'
   | 'event_ledger.posted'
   | 'reservation.upserted'
-  | 'reservation_request.created';
+  | 'reservation_request.created'
+  | 'row.upserted' // genel modül kayıtları: { table, row }
+  ;
+
+/** row.upserted ile eşitlenen tablolar (bulut tarafı sütunları beyaz listeyle alır). */
+export const SYNCED_TABLES = [
+  'services',
+  'reservation_items',
+  'reservation_payments',
+  'reservation_installments',
+  'finance_entries',
+  'staff',
+  'event_staff',
+  'customer_notes',
+] as const;
+export type SyncedTable = (typeof SYNCED_TABLES)[number];
 
 export interface SyncEvent<T = unknown> {
   event_id: string; // UUIDv7, küresel olarak benzersiz

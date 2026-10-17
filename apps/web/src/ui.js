@@ -33,7 +33,11 @@ export function modal({ title, body, submitLabel = 'Kaydet', onSubmit, onCancel,
         ${onSubmit ? `<footer><button type="button" class="btn ghost" data-close>Vazgeç</button><button class="btn primary" type="submit">${esc(submitLabel)}</button></footer>` : ''}
       </form>
     </div>`);
-  const close = () => el.remove();
+  const close = () => {
+    el.remove();
+    window.removeEventListener('hashchange', close);
+  };
+  window.addEventListener('hashchange', close);
   const cancel = () => {
     close();
     onCancel?.();

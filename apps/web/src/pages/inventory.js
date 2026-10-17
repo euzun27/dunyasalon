@@ -10,7 +10,7 @@ export async function renderInventory(root, { user }) {
     h(`
     <div class="page">
       <header class="page-head">
-        <h1>Ürün & Stok</h1>
+        
         <div class="actions">
           <input id="q" class="search" placeholder="Ad veya barkod ara…" />
           ${canEdit ? '<button class="btn primary" id="new">+ Yeni ürün</button>' : ''}

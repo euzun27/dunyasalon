@@ -1,6 +1,6 @@
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { newId, nowIso, requireString, ValidationError, type Role } from '@dunyatek/shared';
-import { one, run, type DB } from '../database/db.ts';
+import { all, one, run, type DB } from '../database/db.ts';
 import { audit } from '../database/outbox.ts';
 
 export interface SessionUser {
@@ -111,4 +111,39 @@ export function assertRole(user: SessionUser, roles: Role[]): void {
   if (user.role !== 'admin' && !roles.includes(user.role)) {
     throw new AuthError('Bu işlem için yetkiniz yok', 403);
   }
+}
+
+export function listUsers(db: DB) {
+  return all<SessionUser & { active: number; created_at: string }>(
+    db, 'SELECT id, username, full_name, role, active, created_at FROM users ORDER BY active DESC, full_name');
+}
+
+export function updateUser(
+  db: DB,
+  id: string,
+  input: { full_name?: string; role?: Role; active?: boolean; password?: string },
+  actorId: string,
+) {
+  const u = one<{ id: string; role: Role }>(db, 'SELECT id, role FROM users WHERE id = ?', id);
+  if (!u) throw new AuthError('Kullanıcı bulunamadı', 404);
+  if (input.role && !ROLES.includes(input.role)) throw new ValidationError('Geçersiz rol');
+  if (id === actorId && (input.active === false || (input.role && input.role !== 'admin'))) {
+    throw new ValidationError('Kendi yönetici yetkinizi kaldıramazsınız');
+  }
+  if (input.password !== undefined && (typeof input.password !== 'string' || input.password.length < 6)) {
+    throw new ValidationError('Şifre en az 6 karakter olmalıdır');
+  }
+  const now = nowIso();
+  if (input.full_name !== undefined) run(db, 'UPDATE users SET full_name = ?, updated_at = ? WHERE id = ?', requireString(input.full_name, 'Ad soyad', 100), now, id);
+  if (input.role) run(db, 'UPDATE users SET role = ?, updated_at = ? WHERE id = ?', input.role, now, id);
+  if (input.active !== undefined) {
+    run(db, 'UPDATE users SET active = ?, updated_at = ? WHERE id = ?', input.active ? 1 : 0, now, id);
+    if (!input.active) run(db, 'DELETE FROM sessions WHERE user_id = ?', id);
+  }
+  if (input.password) {
+    run(db, 'UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?', hashPassword(input.password), now, id);
+    run(db, 'DELETE FROM sessions WHERE user_id = ?', id);
+  }
+  audit(db, actorId, 'user.update', 'user', id, { role: input.role, active: input.active, password: Boolean(input.password) });
+  return listUsers(db).find((x) => x.id === id)!;
 }

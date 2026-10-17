@@ -41,6 +41,8 @@ export interface ReservationRow {
   deposit_kurus: number;
   status: ReservationStatus;
   notes: string | null;
+  option_until: string | null;
+  discount_kurus: number;
   source: string;
   version: number;
   created_by: string | null;
@@ -53,10 +55,20 @@ export type ReservationView = ReservationRow & {
   customer_name: string;
   customer_phone: string | null;
   event_account_id: string | null;
+  total_kurus: number;
+  paid_kurus: number;
+  balance_kurus: number;
 };
 
+const ITEMS_SUM = '(SELECT COALESCE(SUM(i.total_kurus), 0) FROM reservation_items i WHERE i.reservation_id = r.id)';
+const PAID_SUM = `(SELECT COALESCE(SUM(CASE p.kind WHEN 'iade' THEN -p.amount_kurus ELSE p.amount_kurus END), 0)
+                     FROM reservation_payments p WHERE p.reservation_id = r.id AND p.cancelled_at IS NULL)`;
+
 const VIEW_SQL = `SELECT r.*, h.name AS hall_name, c.full_name AS customer_name, c.phone AS customer_phone,
-                         a.id AS event_account_id
+                         a.id AS event_account_id,
+                         r.price_kurus + ${ITEMS_SUM} - r.discount_kurus AS total_kurus,
+                         ${PAID_SUM} AS paid_kurus,
+                         r.price_kurus + ${ITEMS_SUM} - r.discount_kurus - ${PAID_SUM} AS balance_kurus
                     FROM reservations r
                     JOIN halls h ON h.id = r.hall_id
                     JOIN customers c ON c.id = r.customer_id
@@ -101,6 +113,8 @@ function normalize(input: ReservationInput) {
     deposit_kurus: requireInt(input.deposit_kurus ?? 0, 'Kapora', { min: 0 }),
     status,
     notes: optionalString(input.notes, 'Notlar', 2000),
+    option_until: input.option_until ? requireDate(input.option_until, 'Opsiyon bitiş tarihi') : null,
+    discount_kurus: requireInt(input.discount_kurus ?? 0, 'İndirim', { min: 0 }),
   };
 }
 
@@ -148,12 +162,17 @@ export function getReservation(db: DB, id: string): ReservationView {
   return r;
 }
 
-export function listReservations(db: DB, opts: { from?: string; to?: string; hall_id?: string } = {}): ReservationView[] {
+export function listReservations(
+  db: DB,
+  opts: { from?: string; to?: string; hall_id?: string; customer_id?: string; status?: string } = {},
+): ReservationView[] {
   const where: string[] = [];
   const params: string[] = [];
   if (opts.from) { where.push('r.event_date >= ?'); params.push(requireDate(opts.from, 'Başlangıç')); }
   if (opts.to) { where.push('r.event_date <= ?'); params.push(requireDate(opts.to, 'Bitiş')); }
   if (opts.hall_id) { where.push('r.hall_id = ?'); params.push(opts.hall_id); }
+  if (opts.customer_id) { where.push('r.customer_id = ?'); params.push(opts.customer_id); }
+  if (opts.status) { where.push('r.status = ?'); params.push(opts.status); }
   return all<ReservationView>(
     db,
     `${VIEW_SQL} ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY r.event_date, r.start_time LIMIT 1000`,
@@ -177,10 +196,11 @@ export function createReservation(
     run(
       db,
       `INSERT INTO reservations (id, hall_id, customer_id, event_type, event_date, start_time, end_time, guest_count,
-                                 price_kurus, deposit_kurus, status, notes, source, version, created_by, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
+                                 price_kurus, deposit_kurus, status, notes, option_until, discount_kurus, source, version,
+                                 created_by, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
       id, r.hall_id, customerId, r.event_type, r.event_date, r.start_time, r.end_time, r.guest_count,
-      r.price_kurus, r.deposit_kurus, r.status, r.notes, ctx.source ?? 'yerel', ctx.userId, now, now,
+      r.price_kurus, r.deposit_kurus, r.status, r.notes, r.option_until, r.discount_kurus, ctx.source ?? 'yerel', ctx.userId, now, now,
     );
     publish(db, id);
     if (r.status === 'kesin') ensureEventAccount(db, id, r.customer_name, r.event_date);
@@ -213,10 +233,11 @@ export function updateReservation(
     run(
       db,
       `UPDATE reservations SET hall_id = ?, event_type = ?, event_date = ?, start_time = ?, end_time = ?, guest_count = ?,
-              price_kurus = ?, deposit_kurus = ?, status = ?, notes = ?, version = version + 1, updated_at = ?
+              price_kurus = ?, deposit_kurus = ?, status = ?, notes = ?, option_until = ?, discount_kurus = ?,
+              version = version + 1, updated_at = ?
         WHERE id = ?`,
       r.hall_id, r.event_type, r.event_date, r.start_time, r.end_time, r.guest_count,
-      r.price_kurus, r.deposit_kurus, r.status, r.notes, nowIso(), id,
+      r.price_kurus, r.deposit_kurus, r.status, r.notes, r.option_until, r.discount_kurus, nowIso(), id,
     );
     publish(db, id);
     if (r.status === 'kesin') ensureEventAccount(db, id, r.customer_name, r.event_date);

@@ -156,3 +156,30 @@ test('yanlış senkron anahtarı reddedilir', async () => {
   assert.match(sync.status().last_error ?? '', /401/);
   assert.equal(count(c.d1.db, 'SELECT COUNT(*) AS n FROM sync_events'), 0);
 });
+
+test('tahsilat, menü kalemi ve gider kayıtları buluta eşitlenir', async () => {
+  const { saveService } = await import('../../apps/local-server/src/modules/services.ts');
+  const { addItem, addPayment, cancelPayment } = await import('../../apps/local-server/src/modules/reservation-details.ts');
+  const { addEntry } = await import('../../apps/local-server/src/modules/finance.ts');
+  const db = freshDb();
+  const { admin, hall } = seed(db);
+  const c = cloud();
+  const sync = engine(db, c.fetch);
+  const r = createReservation(
+    db,
+    { hall_id: hall.id, customer_name: 'Ayşe', customer_phone: '0555', event_date: '2027-06-12', start_time: '19:00', end_time: '00:00', guest_count: 100, price_kurus: 1_000_000, status: 'kesin' },
+    { userId: admin.id, bufferMinutes: 60 },
+  );
+  const menu = saveService(db, null, { name: 'Menü', kind: 'menu', pricing: 'kisi_basi', price_kurus: 40_000 }, admin.id);
+  addItem(db, r.id, { service_id: menu.id }, admin.id);
+  const p = addPayment(db, r.id, { kind: 'kapora', method: 'nakit', amount_kurus: 500_000 }, admin.id);
+  cancelPayment(db, p.id, 'yanlış', admin.id);
+  addEntry(db, { type: 'gider', category: 'Kira', amount_kurus: 100_000, entry_date: '2027-06-01' }, admin.id);
+  await sync.runOnce();
+  assert.equal(sync.status().pending, 0);
+  const item = c.d1.db.prepare('SELECT total_kurus FROM reservation_items').get() as { total_kurus: number };
+  assert.equal(item.total_kurus, 4_000_000);
+  const pay = c.d1.db.prepare('SELECT cancelled_at FROM reservation_payments').get() as { cancelled_at: string | null };
+  assert.ok(pay.cancelled_at);
+  assert.equal(count(c.d1.db, 'SELECT COUNT(*) AS n FROM finance_entries'), 1);
+});
