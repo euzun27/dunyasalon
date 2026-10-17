@@ -1,6 +1,8 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "dunyasalon",
+  // truvapark.com.tr alan adının bulunduğu Cloudflare hesabı
+  "account_id": "76ab792c15a9186c6ba6e6d1d318eb84",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-16",
   "assets": {
@@ -13,7 +15,7 @@
     {
       "binding": "DB",
       "database_name": "dunyasalon-db",
-      "database_id": "b308b606-bd9a-4f00-bd0f-395607396645",
+      "database_id": "a8b2f282-db6c-44be-84e0-756daa53480d",
       "migrations_dir": "../../migrations/cloud"
     }
   ],
