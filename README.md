@@ -169,6 +169,6 @@ cihazda elle yapılmalıdır (betikler hazır).
 - **Mali belge**: e-Arşiv / ÖKC (yazar kasa) entegrasyonu — şu an satış fişi mali belge değildir
 - **Kart ödemesi**: POS cihazı entegrasyonu (şimdilik kasiyer "Kart" seçer, tutar cihazdan ayrıca çekilir)
 - **Yerel HTTPS** (`salon.local.dunyasalon.com` için yerel DNS + sertifika)
-- Kullanıcı yönetimi ekranı (şimdilik API: `POST /api/users`), ürün içe aktarma (Excel), fiş yazıcısı
-- Sözleşme ve rezervasyon ödeme planı ekranları
+- Ürün içe aktarma (Excel), fiş yazıcısı
+- Otomatik SMS gönderimi için SMS firması entegrasyonu (şimdilik WhatsApp/SMS bağlantısı)
 - KVKK: müşteri verisi saklama süresi, aydınlatma metni, erişim kayıtlarının gözden geçirilmesi
