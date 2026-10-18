@@ -214,6 +214,8 @@ export class SyncEngine {
 
   start(intervalMs: number) {
     if (!this.enabled || this.timer) return;
+    // Sunucu yeniden başlatıldığında (ör. anahtar düzeltildikten sonra) bekleyen hatalı kayıtlar hemen denenir.
+    run(this.db, "UPDATE sync_outbox SET next_attempt_at = NULL WHERE status = 'hata'");
     const tick = () => void this.runOnce();
     tick();
     this.timer = setInterval(tick, intervalMs);
