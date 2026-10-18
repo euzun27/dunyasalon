@@ -9,7 +9,8 @@ export async function renderAccounts(root, { user }) {
     h(`
     <div class="page">
       <header class="page-head">
-        
+        <p class="muted small page-note">Organizasyon sırasında kantinden veresiye alınanlar burada tutulur.
+          Salon ücreti ve menü ödemeleri bu ekrandan değil, rezervasyonun <strong>Tahsilatlar</strong> sekmesinden alınır.</p>
         <div class="actions">
           <select id="filter"><option value="acik">Açık hesaplar</option><option value="kapali">Kapalı hesaplar</option><option value="">Tümü</option></select>
           ${canPost ? '<button class="btn primary" id="new">+ Hesap aç</button>' : ''}
@@ -43,10 +44,13 @@ export async function renderAccounts(root, { user }) {
     if (selected) await showDetail(selected);
   }
 
+  let current = null;
+
   async function showDetail(id) {
     selected = id;
     root.querySelectorAll('tr[data-id]').forEach((tr) => tr.classList.toggle('selected', tr.dataset.id === id));
     const a = await api(`/event-accounts/${id}`);
+    current = a;
     $('#detail').innerHTML = `
       <header class="detail-head">
         <div><h2>${esc(a.title)}</h2><small class="muted">${a.status === 'acik' ? 'Açık' : 'Kapalı'}${a.credit_limit_kurus != null ? ` · Limit ${tl(a.credit_limit_kurus)}` : ''}</small></div>
@@ -56,6 +60,7 @@ export async function renderAccounts(root, { user }) {
         ${canPost && a.status === 'acik' ? '<button class="btn primary small" data-entry="alacak">Tahsilat al</button><button class="btn ghost small" data-entry="borc">Borç ekle</button>' : ''}
         ${canClose ? `<button class="btn ghost small" data-status="${a.status === 'acik' ? 'kapali' : 'acik'}">${a.status === 'acik' ? 'Hesabı kapat' : 'Yeniden aç'}</button>` : ''}
         <button class="btn ghost small" id="print">Yazdır</button>
+        ${a.reservation_id ? `<a class="btn ghost small" href="#/rezervasyon/${a.reservation_id}">Rezervasyona git</a>` : ''}
       </div>
       <table class="table compact">
         <thead><tr><th>Tarih</th><th>Açıklama</th><th class="num">Borç</th><th class="num">Alacak</th></tr></thead>
@@ -97,9 +102,10 @@ export async function renderAccounts(root, { user }) {
     if (b.dataset.entry) {
       const isPayment = b.dataset.entry === 'alacak';
       modal({
-        title: isPayment ? 'Tahsilat al' : 'Borç ekle',
-        body: `<label>Tutar (₺)<input name="amount" required inputmode="decimal" /></label>
-               <label>Açıklama<input name="desc" required value="${isPayment ? 'Nakit tahsilat' : ''}" placeholder="${isPayment ? '' : 'Ör. Ek pasta servisi'}" /></label>`,
+        title: isPayment ? 'Kantin tahsilatı al' : 'Kantin borcu ekle',
+        body: `${isPayment ? `<p class="muted small">Kantin borcu: <strong>${tl(Math.max(0, current?.balance_kurus ?? 0))}</strong>. Salon ve menü ödemesi için rezervasyonun Tahsilatlar sekmesini kullanın.</p>` : ''}
+               <label>Tutar (₺)<input name="amount" required inputmode="decimal" value="${isPayment && current?.balance_kurus > 0 ? (current.balance_kurus / 100).toFixed(2).replace('.', ',') : ''}" /></label>
+               <label>Açıklama<input name="desc" required value="${isPayment ? 'Kantin nakit tahsilat' : ''}" placeholder="${isPayment ? '' : 'Ör. Ek pasta servisi'}" /></label>`,
         onSubmit: async (f) => {
           await api(`/event-accounts/${selected}/entries`, {
             method: 'POST',

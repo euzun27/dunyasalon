@@ -38,7 +38,7 @@ const NAV = [
     items: [
       { path: '/kasa', label: 'Kantin Kasa', icon: 'cart', render: renderPos, roles: ['kasiyer'] },
       { path: '/stok', label: 'Ürün & Stok', icon: 'box', render: renderInventory, roles: ['kasiyer', 'muhasebe'] },
-      { path: '/hesaplar', label: 'Düğün Hesapları', icon: 'ring', render: renderAccounts, roles: ALL },
+      { path: '/hesaplar', label: 'Kantin Hesapları', icon: 'ring', render: renderAccounts, roles: ALL },
       { path: '/kantin-raporu', label: 'Kantin Raporu', icon: 'receipt', render: renderDashboard, roles: ['kasiyer', 'muhasebe'] },
     ],
   },
