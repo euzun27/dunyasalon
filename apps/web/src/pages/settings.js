@@ -9,6 +9,7 @@ const TABS = [
   ['mesaj', 'Mesaj şablonları'],
   ['kullanici', 'Kullanıcılar'],
   ['salon', 'Salonlar'],
+  ['veri', 'Veri sıfırlama'],
 ];
 const ROLES = { admin: 'Yönetici', resepsiyon: 'Resepsiyon', muhasebe: 'Muhasebe', kasiyer: 'Kasiyer' };
 const ROLE_HINTS = {
@@ -38,7 +39,8 @@ export async function renderSettings(root, { query }) {
       else if (tab === 'sozlesme') await contract();
       else if (tab === 'mesaj') await templates();
       else if (tab === 'kullanici') await users();
-      else await halls();
+      else if (tab === 'salon') await halls();
+      else resetData();
     } catch (e) {
       errorToast(e);
     }
@@ -221,6 +223,35 @@ export async function renderSettings(root, { query }) {
             await halls();
           },
         });
+      }),
+    );
+  }
+
+  function resetData() {
+    body.innerHTML = `
+      <header class="card-head"><h3>${icon('alert')} Test verilerini sıfırla</h3></header>
+      <div class="form-narrow">
+        <p>Denemeler bittiğinde gerçek kullanıma temiz başlamak için kullanılır.</p>
+        <div class="grid-2">
+          <div><strong class="danger-text">Silinir</strong><ul class="muted small"><li>Rezervasyonlar ve talepler</li><li>Müşteriler ve notları</li><li>Tahsilat ve ödeme planları</li><li>Kantin satışları, düğün hesapları, kasa oturumları</li><li>Gelir-gider kayıtları</li><li>Stok hareketleri (stoklar sıfırlanır)</li></ul></div>
+          <div><strong class="ok-text">Korunur</strong><ul class="muted small"><li>Kullanıcılar ve şifreler</li><li>İşletme bilgileri, sözleşme ve mesaj şablonları</li><li>Salonlar</li><li>Ürünler ve barkodlar</li><li>Menü, hizmetler ve personel</li></ul></div>
+        </div>
+        <p class="muted small">Silmeden önce veritabanının yedeği alınır. Bulut bağlantısı açıksa panel.truvapark.com.tr'deki aynı kayıtlar da silinir.</p>
+        <div><button class="btn danger solid" id="reset">Test verilerini sıfırla</button></div>
+      </div>`;
+    body.querySelector('#reset').addEventListener('click', () =>
+      modal({
+        title: 'Test verilerini sıfırla',
+        body: `
+          <p>Bu işlem geri alınamaz (yalnızca alınan yedekten geri yüklenebilir).</p>
+          <label>Yönetici şifreniz<input name="password" type="password" required autocomplete="current-password"></label>
+          <label>Onay için <strong>SIFIRLA</strong> yazın<input name="confirm" required autocomplete="off"></label>`,
+        submitLabel: 'Sıfırla',
+        onSubmit: async (fd) => {
+          const r = await api('/admin/reset-data', { method: 'POST', body: { password: fd.get('password'), confirm: fd.get('confirm') } });
+          const total = Object.values(r.deleted).reduce((a, b) => a + b, 0);
+          toast(`${total} kayıt silindi. Bulut: ${r.cloud}`, r.cloud.startsWith('temizlenemedi') ? 'error' : undefined);
+        },
       }),
     );
   }

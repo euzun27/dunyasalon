@@ -145,6 +145,15 @@ npx wrangler secret put ADMIN_TOKEN           # uzaktan panel anahtarı
 npm run deploy                                # web arayüzünü derler ve Worker'ı yayınlar
 ```
 
+**Otomatik yayın:** `main` veya `feature/ilk-surum` dalına bulut, web veya ortak paket kodu gönderildiğinde
+`.github/workflows/deploy-cloud.yml` testleri çalıştırır, D1 güncellemelerini uygular ve yayınlar. Bir kez
+GitHub'da *Settings > Secrets and variables > Actions* altına `CLOUDFLARE_API_TOKEN` eklenmelidir
+(Cloudflare'de "Edit Cloudflare Workers" şablonu + D1 düzenleme izni). Elle yayın için *Actions > Bulut yayını > Run workflow*.
+
+**Test verilerini sıfırlama:** Ayarlar > Veri sıfırlama. Yönetici şifresi ve `SIFIRLA` onayı ister, önce yedek alır;
+salondaki ve buluttaki rezervasyon, müşteri, tahsilat, satış, gelir-gider ve stok kayıtlarını siler. Kullanıcılar,
+ayarlar, salonlar, ürünler, hizmetler ve personel korunur.
+
 `panel.truvapark.com.tr` bulut panelinde yönetim anahtarıyla giriş yapılır. Gerçek kullanımda paneli ayrıca
 **Cloudflare Access** (e-posta ile tek kullanımlık kod) arkasına almanızı öneririm.
 

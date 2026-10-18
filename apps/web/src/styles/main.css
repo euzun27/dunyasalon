@@ -82,6 +82,7 @@ code { font: 0.8rem ui-monospace, Consolas, monospace; background: var(--surface
 .empty { color: var(--muted); text-align: center; padding: 1.5rem; display: flex; gap: 0.4rem; justify-content: center; align-items: center; }
 .warn-text { color: var(--warn); }
 .ok-text { color: var(--ok); }
+.danger-text { color: var(--danger); }
 .neg { color: var(--danger); }
 .qty-in { color: var(--ok); }
 .grow { flex: 1; min-width: 0; }
@@ -240,6 +241,7 @@ legend { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; 
 .btn.ghost { background: var(--surface); border-color: var(--border); }
 .btn.ghost:hover { background: var(--surface-2); }
 .btn.danger, .btn.ghost.danger { color: var(--danger); }
+.btn.danger.solid { background: var(--danger); color: #fff; border-color: var(--danger); }
 .btn.ghost.danger:hover { background: var(--danger-soft); border-color: var(--danger-soft); }
 .btn.small { padding: 0.3rem 0.65rem; font-size: 0.82rem; }
 .btn.block { width: 100%; }

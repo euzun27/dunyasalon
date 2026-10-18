@@ -97,6 +97,20 @@ app.post('/api/sync/push', async (c) => {
   return c.json(result);
 });
 
+// Salondaki "Test verilerini sıfırla" işlemiyle birlikte çağrılır. Salonlar, ürünler, hizmetler,
+// personel ve sync_events (çift gönderim kontrolü, son eşitleme bilgisi) korunur.
+const RESET_TABLES = [
+  'pos_payments', 'pos_sale_items', 'event_ledger', 'pos_sales', 'event_staff', 'reservation_items',
+  'reservation_payments', 'reservation_installments', 'customer_notes', 'finance_entries', 'event_accounts',
+  'reservation_requests', 'reservations', 'customers', 'stock_movements',
+];
+
+app.post('/api/sync/reset', async (c) => {
+  await requireToken(c, c.env.SYNC_TOKEN);
+  await c.env.DB.batch(RESET_TABLES.map((t) => c.env.DB.prepare(`DELETE FROM ${t}`)));
+  return c.json({ ok: true });
+});
+
 app.get('/api/sync/pull', async (c) => {
   await requireToken(c, c.env.SYNC_TOKEN);
   const deviceId = c.req.header('x-device-id') ?? '';

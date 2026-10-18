@@ -7,6 +7,11 @@ import { createReservation } from '../../apps/local-server/src/modules/reservati
 import { SyncEngine } from '../../apps/local-server/src/sync/engine.ts';
 import { run, type DB } from '../../apps/local-server/src/database/db.ts';
 import { D1Shim } from '../helpers/d1-shim.ts';
+import { existsSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { recordManualMovement } from '../../apps/local-server/src/modules/inventory.ts';
+import { resetTestData } from '../../apps/local-server/src/modules/reset.ts';
 import { count, freshDb, seed } from '../helpers/setup.ts';
 
 const SYNC_TOKEN = 'test-sync-token';
@@ -182,4 +187,38 @@ test('tahsilat, menü kalemi ve gider kayıtları buluta eşitlenir', async () =
   const pay = c.d1.db.prepare('SELECT cancelled_at FROM reservation_payments').get() as { cancelled_at: string | null };
   assert.ok(pay.cancelled_at);
   assert.equal(count(c.d1.db, 'SELECT COUNT(*) AS n FROM finance_entries'), 1);
+});
+
+test('test verileri sıfırlanır: şifre ve onay ister, yedek alır, salonu ve bulutu temizler', async () => {
+  process.env.BACKUP_DIR = mkdtempSync(join(tmpdir(), 'sifirlama-'));
+  const db = freshDb();
+  const { admin, kola, hall } = seed(db);
+  const c = cloud();
+  const sync = engine(db, c.fetch);
+  completeSale(db, { lines: [{ product_id: kola.id, qty: toQty(2) }], payments: [{ method: 'nakit', amount_kurus: 8000 }] }, ctx(admin.id));
+  createReservation(db, { hall_id: hall.id, customer_name: 'Ayşe', customer_phone: '05551112233', event_date: '2027-06-12', start_time: '19:00', end_time: '00:00', status: 'kesin' }, { userId: admin.id, bufferMinutes: 60 });
+  await sync.runOnce();
+  assert.equal(count(c.d1.db, 'SELECT COUNT(*) AS n FROM reservations'), 1);
+
+  await assert.rejects(resetTestData(db, { password: 'yanlis', confirm: 'SIFIRLA' }, admin, ':memory:'), /Şifre hatalı/);
+  await assert.rejects(resetTestData(db, { password: 'admin123', confirm: 'evet' }, admin, ':memory:'), /SIFIRLA/);
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM reservations'), 1);
+
+  const r = await resetTestData(db, { password: 'admin123', confirm: 'sıfırla' }, admin, ':memory:');
+  assert.ok(existsSync(r.backup));
+  await sync.resetCloud();
+  for (const t of ['reservations', 'customers', 'pos_sales', 'stock_movements', 'sync_outbox']) {
+    assert.equal(count(db, `SELECT COUNT(*) AS n FROM ${t}`), 0, t);
+  }
+  for (const t of ['reservations', 'customers', 'pos_sales', 'stock_movements']) {
+    assert.equal(count(c.d1.db, `SELECT COUNT(*) AS n FROM ${t}`), 0, `bulut ${t}`);
+  }
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM users'), 1);
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM halls'), 1);
+  assert.equal(count(c.d1.db, 'SELECT COUNT(*) AS n FROM products'), 2);
+  // Sıfırlamadan sonra stok sıfırdır; yeni giriş ve satış normal eşitlenir
+  recordManualMovement(db, { product_id: kola.id, type: 'giris', qty: toQty(10) }, admin.id);
+  completeSale(db, { lines: [{ product_id: kola.id, qty: toQty(1) }], payments: [{ method: 'nakit', amount_kurus: 4000 }] }, ctx(admin.id));
+  await sync.runOnce();
+  assert.equal(count(c.d1.db, 'SELECT COUNT(*) AS n FROM pos_sales'), 1);
 });

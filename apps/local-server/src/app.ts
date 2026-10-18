@@ -17,6 +17,7 @@ import * as finance from './modules/finance.ts';
 import * as staff from './modules/staff.ts';
 import * as settings from './modules/settings.ts';
 import { dashboard } from './modules/dashboard.ts';
+import { resetTestData } from './modules/reset.ts';
 import type { SyncEngine } from './sync/engine.ts';
 
 type Env = { Variables: { user: SessionUser } };
@@ -313,6 +314,20 @@ export function createApp(db: DB, config: Config, sync?: SyncEngine) {
 
   // --- Ana sayfa, ayarlar ---
   api.get('/dashboard', (c) => c.json(dashboard(db, c.req.query('today') ?? undefined)));
+  api.post('/admin/reset-data', async (c) => {
+    const u = role(c, 'admin');
+    const local = await resetTestData(db, await c.req.json(), u, config.dbPath);
+    let cloud: string = 'kapalı';
+    if (sync?.enabled) {
+      try {
+        await sync.resetCloud();
+        cloud = 'temizlendi';
+      } catch (err) {
+        cloud = `temizlenemedi: ${(err as Error).message}`;
+      }
+    }
+    return c.json({ ...local, cloud });
+  });
   api.get('/settings', (c) => c.json(settings.getSettings(db)));
   api.put('/settings', async (c) => {
     const u = role(c, 'admin');

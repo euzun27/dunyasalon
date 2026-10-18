@@ -200,6 +200,18 @@ export class SyncEngine {
     }
   }
 
+  /** Buluttaki test verilerini siler; süren bir eşitleme varsa bitmesini bekler. */
+  async resetCloud(): Promise<void> {
+    if (!this.enabled) throw new Error('Bulut bağlantısı tanımlı değil');
+    while (this.running) await new Promise((r) => setTimeout(r, 200));
+    this.running = true;
+    try {
+      await this.call('/api/sync/reset', { method: 'POST', body: '{}' });
+    } finally {
+      this.running = false;
+    }
+  }
+
   start(intervalMs: number) {
     if (!this.enabled || this.timer) return;
     const tick = () => void this.runOnce();
