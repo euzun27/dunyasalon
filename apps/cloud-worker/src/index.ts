@@ -17,7 +17,7 @@ import {
   requireTime,
   ValidationError,
 } from '@dunyatek/shared';
-import { buildYearlyReport } from '@dunyatek/business-rules';
+import { buildYearlyReport, EVENT_ACCOUNT_BALANCE_SQL, EVENT_ACCOUNT_ORDER_SQL } from '@dunyatek/business-rules';
 import { projectionStatements } from './apply.ts';
 
 type Bindings = {
@@ -231,6 +231,23 @@ admin.get('/reservations', async (c) => {
     .bind(from)
     .all();
   return c.json(results);
+});
+
+/** Kantin hesapları (cari): salondaki "Kantin Hesapları" ekranıyla aynı bakiye hesabı. */
+admin.get('/event-accounts', async (c) => {
+  const status = c.req.query('status');
+  const where = status === 'acik' || status === 'kapali' ? 'WHERE a.status = ?' : '';
+  const stmt = c.env.DB.prepare(`${EVENT_ACCOUNT_BALANCE_SQL} ${where} ${EVENT_ACCOUNT_ORDER_SQL}`);
+  const { results } = await (where ? stmt.bind(status) : stmt).all();
+  return c.json(results);
+});
+
+admin.get('/event-accounts/:id', async (c) => {
+  const id = c.req.param('id');
+  const account = await c.env.DB.prepare(`${EVENT_ACCOUNT_BALANCE_SQL} WHERE a.id = ? GROUP BY a.id`).bind(id).first();
+  if (!account) return c.json({ error: 'Hesap bulunamadı' }, 404);
+  const { results } = await c.env.DB.prepare('SELECT * FROM event_ledger WHERE event_account_id = ? ORDER BY created_at, rowid').bind(id).all();
+  return c.json({ ...account, ledger: results });
 });
 
 admin.get('/halls', async (c) => {

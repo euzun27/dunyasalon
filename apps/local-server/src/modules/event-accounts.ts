@@ -1,4 +1,5 @@
 import { newId, nowIso, NotFoundError, ValidationError, ConflictError, optionalString, requireInt, requireString } from '@dunyatek/shared';
+import { EVENT_ACCOUNT_BALANCE_SQL, EVENT_ACCOUNT_ORDER_SQL } from '@dunyatek/business-rules';
 import { all, one, run, tx, type DB } from '../database/db.ts';
 import { audit, enqueue } from '../database/outbox.ts';
 
@@ -24,14 +25,7 @@ export interface LedgerRow {
   created_at: string;
 }
 
-const BALANCE_SQL = `
-  SELECT a.*, r.event_date,
-         COALESCE(SUM(CASE l.entry_type WHEN 'borc' THEN l.amount_kurus END), 0) AS debit_kurus,
-         COALESCE(SUM(CASE l.entry_type WHEN 'alacak' THEN l.amount_kurus END), 0) AS credit_kurus,
-         COALESCE(SUM(CASE l.entry_type WHEN 'borc' THEN l.amount_kurus ELSE -l.amount_kurus END), 0) AS balance_kurus
-    FROM event_accounts a
-    LEFT JOIN reservations r ON r.id = a.reservation_id
-    LEFT JOIN event_ledger l ON l.event_account_id = a.id`;
+const BALANCE_SQL = EVENT_ACCOUNT_BALANCE_SQL;
 
 export type EventAccountSummary = EventAccountRow & {
   event_date: string | null;
@@ -102,7 +96,7 @@ export function createEventAccount(
 export function listEventAccounts(db: DB, opts: { status?: 'acik' | 'kapali' } = {}): EventAccountSummary[] {
   const where = opts.status ? 'WHERE a.status = ?' : '';
   const params = opts.status ? [opts.status] : [];
-  return all<EventAccountSummary>(db, `${BALANCE_SQL} ${where} GROUP BY a.id ORDER BY COALESCE(r.event_date, a.created_at) DESC`, ...params);
+  return all<EventAccountSummary>(db, `${BALANCE_SQL} ${where} ${EVENT_ACCOUNT_ORDER_SQL}`, ...params);
 }
 
 export function getEventAccount(db: DB, id: string): EventAccountSummary {

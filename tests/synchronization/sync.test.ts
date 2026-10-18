@@ -121,6 +121,25 @@ test('iade ve düğün hesabı hareketleri buluta yansır', async () => {
   assert.equal(count(c.d1.db, "SELECT COUNT(*) AS n FROM reservations WHERE status = 'kesin'"), 1);
   const stock = c.d1.db.prepare('SELECT qty FROM inventory_balances WHERE product_id = ?').get(kola.id) as { qty: number };
   assert.equal(stock.qty, toQty(100));
+
+  // Bulut panelindeki kantin hesabı bakiyesi salondaki "Kantin Hesapları" ekranıyla aynıdır
+  const { addManualEntry, listEventAccounts } = await import('../../apps/local-server/src/modules/event-accounts.ts');
+  completeSale(
+    db,
+    { lines: [{ product_id: kola.id, qty: toQty(3) }], payments: [{ method: 'dugun_hesabi', amount_kurus: 12000 }], event_account_id: r.event_account_id },
+    ctx(admin.id),
+  );
+  addManualEntry(db, r.event_account_id!, { entry_type: 'borc', amount_kurus: 50000, description: 'Ek pasta' }, admin.id);
+  addManualEntry(db, r.event_account_id!, { entry_type: 'alacak', amount_kurus: 20000, description: 'Kantin nakit tahsilat' }, admin.id);
+  await sync.runOnce();
+  const cloudAccounts = (await (await c.admin('/event-accounts?status=acik')).json()) as Record<string, unknown>[];
+  assert.deepEqual(cloudAccounts, JSON.parse(JSON.stringify(listEventAccounts(db, { status: 'acik' }))));
+  assert.deepEqual(
+    { debit: cloudAccounts[0]!.debit_kurus, credit: cloudAccounts[0]!.credit_kurus, balance: cloudAccounts[0]!.balance_kurus },
+    { debit: 70000, credit: 28000, balance: 42000 },
+  );
+  const detail = (await (await c.admin(`/event-accounts/${r.event_account_id}`)).json()) as { ledger: unknown[] };
+  assert.equal(detail.ledger.length, 5);
 });
 
 test('uzaktan alınan rezervasyon talebi yerelde "talep" olarak düşer ve salonu kilitlemez', async () => {

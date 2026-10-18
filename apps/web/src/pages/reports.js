@@ -39,7 +39,7 @@ export async function renderReports(root, _ctx, { cloud = false } = {}) {
         <section class="kpis">
           ${kpi('calendar', 'Etkinlik', t.events, `${t.cancelled} iptal`)}
           ${kpi('doc', 'Sözleşme tutarı', tl(t.contract_kurus), 'kesin + tamamlanan')}
-          ${kpi('wallet', 'Tahsilat', tl(t.collected_kurus), `kantin ${tl(t.pos_kurus)}`)}
+          ${kpi('wallet', 'Tahsilat', tl(t.collected_kurus), `kantin satışı ${tl(t.pos_kurus)}`)}
           ${kpi('receipt', 'Gider', tl(t.expense_kurus), 'personel dahil')}
           ${kpi('chart', 'Net', tl(t.net_kurus), 'tahsilat + kantin + diğer − gider', t.net_kurus >= 0 ? 'ok' : 'danger')}
         </section>

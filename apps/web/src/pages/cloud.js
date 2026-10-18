@@ -18,23 +18,74 @@ export async function renderCloud(root) {
         <div class="card"><h2>Yaklaşan etkinlikler</h2><div class="table-wrap"><table class="table compact">
           <thead><tr><th>Tarih</th><th>Müşteri</th><th>Durum</th><th class="num">Toplam</th><th class="num">Tahsil</th><th class="num">Kalan</th></tr></thead>
           <tbody id="upcoming"></tbody></table></div></div>
+        <div class="card"><header class="card-head"><h2>Kantin hesapları (cari)</h2>
+          <select id="acc-filter" style="width:auto"><option value="acik">Açık hesaplar</option><option value="kapali">Kapalı hesaplar</option><option value="">Tümü</option></select></header>
+          <div class="table-wrap"><table class="table compact">
+          <thead><tr><th>Hesap</th><th>Son hareket</th><th class="num">Borç</th><th class="num">Tahsilat</th><th class="num">Kalan borç</th></tr></thead>
+          <tbody id="accounts"></tbody><tfoot id="accounts-total"></tfoot></table></div></div>
         <div class="card"><header class="card-head"><h2 id="hall-title">Salonlara göre</h2><a class="btn ghost small" href="#/bulut-raporlar">Tüm raporlar</a></header><div id="halls"></div></div>
       </div>
     </div>`),
   );
   const $ = (s) => root.querySelector(s);
   let halls = [];
+  const sum = (rows, k) => rows.reduce((t, r) => t + Number(r[k] ?? 0), 0);
+
+  async function loadAccounts() {
+    // En çok borcu olan en üstte
+    const list = (await api('/cloud/event-accounts', { query: { status: $('#acc-filter').value } })).sort((a, b) => b.balance_kurus - a.balance_kurus);
+    $('#accounts').innerHTML = list.length
+      ? list
+          .map(
+            (a) => `<tr class="clickable" data-acc="${a.id}"><td>${esc(a.title)}${a.status === 'kapali' ? ' <span class="badge">kapalı</span>' : ''}
+                <small class="block muted">${a.event_date ? `Etkinlik ${dateTR(a.event_date)}` : ''}</small></td>
+              <td>${a.last_entry_at ? dateTimeTR(a.last_entry_at) : '-'}</td>
+              <td class="num">${tl(a.debit_kurus)}</td><td class="num">${tl(a.credit_kurus)}</td>
+              <td class="num ${a.balance_kurus > 0 ? 'warn-text' : 'ok-text'}"><strong>${tl(a.balance_kurus)}</strong></td></tr>`,
+          )
+          .join('')
+      : emptyRow(5, 'Hesap yok');
+    $('#accounts-total').innerHTML = list.length > 1
+      ? `<tr><th>Toplam</th><th></th><th class="num">${tl(sum(list, 'debit_kurus'))}</th><th class="num">${tl(sum(list, 'credit_kurus'))}</th><th class="num">${tl(sum(list, 'balance_kurus'))}</th></tr>`
+      : '';
+    return list;
+  }
+
+  async function showAccount(id) {
+    const a = await api(`/cloud/event-accounts/${id}`);
+    modal({
+      title: a.title,
+      body: `<p class="muted small">Borç ${tl(a.debit_kurus)} · Tahsilat ${tl(a.credit_kurus)} · <strong>Bakiye ${tl(a.balance_kurus)}</strong></p>
+        <div class="table-wrap"><table class="table compact">
+        <thead><tr><th>Tarih</th><th>Açıklama</th><th class="num">Borç</th><th class="num">Alacak</th></tr></thead>
+        <tbody>${
+          a.ledger.length
+            ? a.ledger
+                .map(
+                  (l) => `<tr><td>${dateTimeTR(l.created_at)}</td><td>${esc(l.description)}</td>
+                  <td class="num">${l.entry_type === 'borc' ? tl(l.amount_kurus) : ''}</td>
+                  <td class="num">${l.entry_type === 'alacak' ? tl(l.amount_kurus) : ''}</td></tr>`,
+                )
+                .join('')
+            : emptyRow(4, 'Hareket yok')
+        }</tbody></table></div>`,
+      wide: true,
+    });
+  }
 
   async function load() {
     const year = $('#date').value.slice(0, 4);
     const [s, report] = await Promise.all([api('/cloud/summary', { query: { date: $('#date').value } }), api('/cloud/reports/yearly', { query: { year } })]);
     halls = await api('/cloud/halls');
+    const openAccounts = await api('/cloud/event-accounts', { query: { status: 'acik' } });
+    await loadAccounts();
     const last = s.devices.map((d) => `${dateTimeTR(d.last_received_at)} <small class="block muted">${esc(d.origin)}</small>`).join('') || 'henüz veri yok';
     $('#stats').innerHTML = [
       ['Rezervasyon tahsilatı', tl(s.reservation_payments.total)],
       ['Açık alacak', `${tl(s.receivable.total)} <small class="muted">${s.receivable.count} etkinlik</small>`],
-      ['Kantin satış adedi', s.sales.count],
-      ['Kantin cirosu', tl(s.sales.total)],
+      ['Toplam kantin borcu (cari)', `${tl(sum(openAccounts, 'balance_kurus'))} <small class="muted">${openAccounts.length} açık hesap</small>`],
+      ['Kantin satış adedi (gün)', s.sales.count],
+      ['Kantin cirosu (gün)', tl(s.sales.total)],
       ...s.by_method.map((m) => [METHOD_LABELS[m.method] ?? m.method, tl(m.total)]),
       ['Bekleyen talep', s.pending_requests],
       ['Son eşitleme', last],
@@ -91,5 +142,10 @@ export async function renderCloud(root) {
     });
   });
   $('#date').addEventListener('change', () => load().catch(errorToast));
+  $('#acc-filter').addEventListener('change', () => loadAccounts().catch(errorToast));
+  root.addEventListener('click', (e) => {
+    const row = e.target.closest('tr[data-acc]');
+    if (row) showAccount(row.dataset.acc).catch(errorToast);
+  });
   await load().catch(errorToast);
 }
