@@ -6,7 +6,7 @@ import { icon } from '../icons.js';
 const MONTHS = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
 const WEEKDAYS = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
 
-export async function renderReports(root) {
+export async function renderReports(root, _ctx, { cloud = false } = {}) {
   let year = String(new Date().getFullYear());
   root.append(
     h(`
@@ -18,7 +18,7 @@ export async function renderReports(root) {
           <button class="icon-btn" id="next" aria-label="Sonraki yıl">›</button>
         </div>
         <div class="actions">
-          <a class="btn ghost" href="#/kantin-raporu">${icon('receipt', 16)} Günlük kantin raporu</a>
+          ${cloud ? '' : `<a class="btn ghost" href="#/kantin-raporu">${icon('receipt', 16)} Günlük kantin raporu</a>`}
           <button class="btn ghost" id="print">${icon('print', 16)} Yazdır</button>
         </div>
       </div>
@@ -30,7 +30,7 @@ export async function renderReports(root) {
   async function load() {
     root.querySelector('#year').textContent = year;
     try {
-      const r = await api('/reports/yearly', { query: { year } });
+      const r = await api(cloud ? '/cloud/reports/yearly' : '/reports/yearly', { query: { year } });
       const t = r.totals;
       const income = r.series.collected.map((v, i) => v + r.series.pos[i] + r.series.other_income[i]);
       const wd = Object.fromEntries(r.by_weekday.map((w) => [Number(w.wd), w.count]));
@@ -61,11 +61,11 @@ export async function renderReports(root) {
             <header class="card-head"><h3>Etkinlik türleri</h3></header>
             ${table(r.by_type.map((x) => [EVENT_TYPES[x.event_type] ?? x.event_type, x.count, x.total]))}
           </section>
-          <section class="card">
-            <header class="card-head"><h3>Salonlar</h3></header>
-            ${table(r.by_hall.map((x) => [x.hall_name, x.count, x.total]))}
-          </section>
         </div>
+        <section class="card">
+          <header class="card-head"><h3>${icon('home')} Salonlara göre</h3></header>
+          ${hallTable(r.by_hall)}
+        </section>
         <section class="card">
           <header class="card-head"><h3>Aylık döküm</h3></header>
           <div class="table-wrap"><table class="table compact">
@@ -118,6 +118,17 @@ function barChart(series, colors, fmt, W = 720) {
 
 function bar(label, v, max, text) {
   return `<div class="bar-row"><span>${esc(label)}</span><div class="bar"><i style="width:${v ? Math.max(2, Math.round((v / max) * 100)) : 0}%"></i></div><strong>${esc(text)}</strong></div>`;
+}
+
+export function hallTable(rows) {
+  if (!rows.length) return '<p class="empty">Bu yıl kesinleşmiş etkinlik yok.</p>';
+  const t = rows.reduce((a, x) => ({ count: a.count + x.count, guests: a.guests + x.guests, total: a.total + x.total, collected: a.collected + x.collected, remaining: a.remaining + x.remaining }), { count: 0, guests: 0, total: 0, collected: 0, remaining: 0 });
+  const row = (name, x, tag = 'td') => `<tr><${tag}>${name}</${tag}><td class="num">${x.count}</td><td class="num">${x.guests}</td><td class="num">${tl(x.total)}</td><td class="num">${tl(x.collected)}</td><td class="num ${x.remaining > 0 ? 'warn-text' : ''}">${tl(x.remaining)}</td></tr>`;
+  return `<div class="table-wrap"><table class="table compact">
+    <thead><tr><th>Salon</th><th class="num">Etkinlik</th><th class="num">Davetli</th><th class="num">Sözleşme</th><th class="num">Tahsil</th><th class="num">Kalan</th></tr></thead>
+    <tbody>${rows.map((x) => row(esc(x.hall_name), x)).join('')}</tbody>
+    ${rows.length > 1 ? `<tfoot>${row('<strong>Toplam</strong>', t)}</tfoot>` : ''}
+  </table></div>`;
 }
 
 function table(rows) {

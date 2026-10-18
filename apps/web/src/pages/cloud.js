@@ -1,6 +1,7 @@
 import { api } from '../services/api.js';
-import { esc, tl, qty, today, dateTR, dateTimeTR, STATUS_LABELS, METHOD_LABELS, EVENT_TYPES } from '../services/format.js';
+import { esc, tl, today, dateTR, dateTimeTR, STATUS_LABELS, METHOD_LABELS, EVENT_TYPES } from '../services/format.js';
 import { h, modal, toast, errorToast, emptyRow } from '../ui.js';
+import { hallTable } from './reports.js';
 
 /** panel.truvapark.com.tr uzaktan yönetim paneli: senkronize verileri gösterir, yalnızca rezervasyon TALEBİ alır. */
 export async function renderCloud(root) {
@@ -17,7 +18,7 @@ export async function renderCloud(root) {
         <div class="card"><h2>Yaklaşan etkinlikler</h2><div class="table-wrap"><table class="table compact">
           <thead><tr><th>Tarih</th><th>Müşteri</th><th>Durum</th><th class="num">Toplam</th><th class="num">Tahsil</th><th class="num">Kalan</th></tr></thead>
           <tbody id="upcoming"></tbody></table></div></div>
-        <div class="card"><h2>Stok</h2><table class="table compact"><tbody id="stock"></tbody></table></div>
+        <div class="card"><header class="card-head"><h2 id="hall-title">Salonlara göre</h2><a class="btn ghost small" href="#/bulut-raporlar">Tüm raporlar</a></header><div id="halls"></div></div>
       </div>
     </div>`),
   );
@@ -25,7 +26,8 @@ export async function renderCloud(root) {
   let halls = [];
 
   async function load() {
-    const [s, stock] = await Promise.all([api('/cloud/summary', { query: { date: $('#date').value } }), api('/cloud/stock')]);
+    const year = $('#date').value.slice(0, 4);
+    const [s, report] = await Promise.all([api('/cloud/summary', { query: { date: $('#date').value } }), api('/cloud/reports/yearly', { query: { year } })]);
     halls = await api('/cloud/halls');
     const last = s.devices.map((d) => `${dateTimeTR(d.last_received_at)} <small class="block muted">${esc(d.origin)}</small>`).join('') || 'henüz veri yok';
     $('#stats').innerHTML = [
@@ -50,9 +52,8 @@ export async function renderCloud(root) {
           )
           .join('')
       : emptyRow(6, 'Yaklaşan etkinlik yok');
-    $('#stock').innerHTML = stock.length
-      ? stock.map((p) => `<tr><td>${esc(p.name)}</td><td class="num">${qty(p.stock_qty)}</td><td class="num">${tl(p.price_kurus)}</td></tr>`).join('')
-      : emptyRow(3, 'Ürün yok');
+    $('#hall-title').textContent = `Salonlara göre · ${year}`;
+    $('#halls').innerHTML = hallTable(report.by_hall);
   }
 
   $('#request').addEventListener('click', () => {

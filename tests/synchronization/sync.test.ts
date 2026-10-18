@@ -203,6 +203,15 @@ test('tahsilat, menü kalemi ve gider kayıtları buluta eşitlenir', async () =
   assert.deepEqual(summary.receivable, { total: 3_500_000, count: 1 });
   const daily = (await (await c.admin(`/summary?date=${today}`)).json()) as { reservation_payments: { total: number } };
   assert.equal(daily.reservation_payments.total, 1_500_000);
+
+  // Patron raporu: buluttaki yıllık rapor salondakiyle aynı sonucu verir
+  const { yearlyReport } = await import('../../apps/local-server/src/modules/reports.ts');
+  const cloudReport = await (await c.admin('/reports/yearly?year=2027')).json();
+  const localReport = JSON.parse(JSON.stringify(await yearlyReport(db, '2027')));
+  assert.deepEqual(cloudReport, localReport);
+  assert.deepEqual(localReport.by_hall, [
+    { hall_name: 'Büyük Salon', count: 1, total: 5_000_000, collected: 1_500_000, guests: 100, remaining: 3_500_000 },
+  ]);
 });
 
 test('test verileri sıfırlanır: şifre ve onay ister, yedek alır, salonu ve bulutu temizler', async () => {

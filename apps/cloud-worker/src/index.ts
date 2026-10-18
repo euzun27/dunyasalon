@@ -17,6 +17,7 @@ import {
   requireTime,
   ValidationError,
 } from '@dunyatek/shared';
+import { buildYearlyReport } from '@dunyatek/business-rules';
 import { projectionStatements } from './apply.ts';
 
 type Bindings = {
@@ -192,6 +193,16 @@ admin.get('/summary', async (c) => {
     reservation_payments: resPayments!.results[0],
     receivable: receivable!.results[0],
   });
+});
+
+admin.get('/reports/yearly', async (c) => {
+  const db = c.env.DB;
+  const year = c.req.query('year') ?? nowIso().slice(0, 4);
+  const report = await buildYearlyReport(
+    async <T,>(sql: string, ...params: (string | number)[]) => (await db.prepare(sql).bind(...params).all<T>()).results,
+    year,
+  );
+  return c.json(report);
 });
 
 admin.get('/sales', async (c) => {

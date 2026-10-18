@@ -119,7 +119,15 @@ async function route() {
 
   const groups =
     mode === 'cloud'
-      ? [{ group: null, items: [{ path: '/bulut', label: 'Bulut Özeti', icon: 'cloud', render: renderCloud, roles: [] }] }]
+      ? [
+          {
+            group: null,
+            items: [
+              { path: '/bulut', label: 'Bulut Özeti', icon: 'cloud', render: renderCloud, roles: [] },
+              { path: '/bulut-raporlar', label: 'Raporlar', icon: 'chart', render: (root, ctx) => renderReports(root, ctx, { cloud: true }), roles: [] },
+            ],
+          },
+        ]
       : NAV.map((g) => ({ ...g, items: g.items.filter((r) => allowed(r, user)) })).filter((g) => g.items.length);
   const flat = groups.flatMap((g) => g.items);
 

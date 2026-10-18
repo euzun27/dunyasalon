@@ -341,9 +341,9 @@ export function createApp(db: DB, config: Config, sync?: SyncEngine) {
   });
 
   // --- Raporlar ve senkronizasyon ---
-  api.get('/reports/yearly', (c) => {
+  api.get('/reports/yearly', async (c) => {
     role(c, 'muhasebe');
-    return c.json(yearlyReport(db, c.req.query('year') ?? new Date().toISOString().slice(0, 4)));
+    return c.json(await yearlyReport(db, c.req.query('year') ?? new Date().toISOString().slice(0, 4)));
   });
   api.get('/reports/daily', (c) => {
     role(c, 'muhasebe', 'kasiyer');
