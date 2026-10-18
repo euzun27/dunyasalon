@@ -181,22 +181,46 @@ export async function renderSettings(root, { query }) {
     body.innerHTML = `
       <header class="card-head"><h3>${icon('home')} Salonlar</h3><button class="btn primary" id="add-hall">${icon('plus', 16)} Salon ekle</button></header>
       <table class="table">
-        <thead><tr><th>Salon</th><th class="num">Kapasite</th><th>Durum</th></tr></thead>
+        <thead><tr><th>Salon</th><th class="num">Kapasite</th><th>Durum</th><th></th></tr></thead>
         <tbody>${
           list.length
-            ? list.map((x) => `<tr><td><strong>${esc(x.name)}</strong></td><td class="num">${x.capacity ?? '—'}</td><td>${x.active ? '<span class="badge ok">Aktif</span>' : '<span class="badge">Pasif</span>'}</td></tr>`).join('')
-            : emptyRow(3, 'Salon yok.')
+            ? list
+                .map(
+                  (x) => `<tr><td><strong>${esc(x.name)}</strong></td><td class="num">${x.capacity ?? '—'}</td><td>${x.active ? '<span class="badge ok">Aktif</span>' : '<span class="badge">Pasif</span>'}</td>
+                  <td class="row-actions"><button class="btn ghost small" data-edit="${x.id}">${icon('edit', 14)} Düzenle</button></td></tr>`,
+                )
+                .join('')
+            : emptyRow(4, 'Salon yok.')
         }</tbody>
-      </table>`;
+      </table>
+      <p class="muted small">Kullanılmayan salonu pasif yapın: geçmiş rezervasyonlar korunur, yeni rezervasyonda listelenmez.</p>`;
+    const form = (hall = {}) => `
+      <div class="grid-2"><label>Salon adı<input name="name" required value="${esc(hall.name ?? '')}"></label><label>Kapasite (kişi)<input name="capacity" type="number" min="1" value="${hall.capacity ?? ''}"></label></div>
+      ${hall.id ? `<label class="check"><input type="checkbox" name="active" ${hall.active ? 'checked' : ''}> Aktif (rezervasyonda seçilebilir)</label>` : ''}`;
+    const values = (fd) => ({ name: fd.get('name'), capacity: fd.get('capacity') ? Number(fd.get('capacity')) : null });
     body.querySelector('#add-hall').addEventListener('click', () =>
       modal({
         title: 'Yeni salon',
-        body: `<div class="grid-2"><label>Salon adı<input name="name" required></label><label>Kapasite (kişi)<input name="capacity" type="number" min="1"></label></div>`,
+        body: form(),
         onSubmit: async (fd) => {
-          await api('/halls', { method: 'POST', body: { name: fd.get('name'), capacity: fd.get('capacity') ? Number(fd.get('capacity')) : null } });
+          await api('/halls', { method: 'POST', body: values(fd) });
           toast('Salon eklendi');
           await halls();
         },
+      }),
+    );
+    body.querySelectorAll('[data-edit]').forEach((b) =>
+      b.addEventListener('click', () => {
+        const hall = list.find((x) => x.id === b.dataset.edit);
+        modal({
+          title: 'Salonu düzenle',
+          body: form(hall),
+          onSubmit: async (fd) => {
+            await api(`/halls/${hall.id}`, { method: 'PUT', body: { ...values(fd), active: fd.get('active') === 'on' } });
+            toast('Salon güncellendi');
+            await halls();
+          },
+        });
       }),
     );
   }

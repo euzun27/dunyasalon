@@ -11,6 +11,7 @@ function monthRange(ym) {
 
 /** Yeni/düzenle formu. Kaydedince onSaved(rezervasyon) çağrılır. */
 export function reservationForm(r, halls, onSaved) {
+  halls = halls.filter((x) => x.active || x.id === r.hall_id);
   if (halls.length === 0) return toast('Önce Ayarlar > Salonlar bölümünden bir salon tanımlayın.', 'error');
   const isNew = !r.id;
   const m = modal({

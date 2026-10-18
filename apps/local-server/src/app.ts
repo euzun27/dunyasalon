@@ -156,6 +156,10 @@ export function createApp(db: DB, config: Config, sync?: SyncEngine) {
     const u = role(c, 'admin');
     return c.json(reservations.createHall(db, await c.req.json(), u.id), 201);
   });
+  api.put('/halls/:id', async (c) => {
+    const u = role(c, 'admin');
+    return c.json(reservations.updateHall(db, c.req.param('id'), await c.req.json(), u.id));
+  });
   api.get('/reservations', (c) =>
     c.json(
       reservations.listReservations(db, {

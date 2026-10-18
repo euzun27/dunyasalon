@@ -95,6 +95,28 @@ export function createHall(db: DB, input: { name: string; capacity?: number | nu
   });
 }
 
+export function updateHall(
+  db: DB,
+  id: string,
+  input: { name?: string; capacity?: number | null; active?: boolean },
+  userId: string | null,
+): HallRow {
+  return tx(db, () => {
+    const hall = one<HallRow>(db, 'SELECT * FROM halls WHERE id = ?', id);
+    if (!hall) throw new NotFoundError('Salon bulunamadı');
+    const name = input.name === undefined ? hall.name : requireString(input.name, 'Salon adı', 80);
+    if (one(db, 'SELECT id FROM halls WHERE name = ? AND id <> ?', name, id)) throw new ConflictError('Bu isimde salon var');
+    const capacity =
+      input.capacity === undefined ? hall.capacity : input.capacity == null ? null : requireInt(input.capacity, 'Kapasite', { min: 1 });
+    const active = input.active === undefined ? hall.active : input.active ? 1 : 0;
+    const row: HallRow = { ...hall, name, capacity, active, updated_at: nowIso() };
+    run(db, 'UPDATE halls SET name = ?, capacity = ?, active = ?, updated_at = ? WHERE id = ?', name, capacity, active, row.updated_at, id);
+    enqueue(db, 'hall.upserted', row.id, row);
+    audit(db, userId, 'hall.update', 'hall', id, { name, capacity, active });
+    return row;
+  });
+}
+
 // --- Rezervasyonlar ---
 
 function normalize(input: ReservationInput) {

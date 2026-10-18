@@ -6,7 +6,10 @@ import {
   setReservationStatus,
   updateReservation,
   checkAvailability,
+  createHall,
+  updateHall,
 } from '../../apps/local-server/src/modules/reservations.ts';
+import { one } from '../../apps/local-server/src/database/db.ts';
 import { listEventAccounts } from '../../apps/local-server/src/modules/event-accounts.ts';
 import { freshDb, seed } from '../helpers/setup.ts';
 
@@ -66,4 +69,17 @@ test('iptal edilen rezervasyonun saati yeniden kullanılabilir', () => {
   setReservationStatus(db, r.id, 'iptal', ctx);
   const again = createReservation(db, { ...base, hall_id: hall.id, customer_name: 'Yeni', customer_phone: '05559998877', status: 'kesin' }, ctx);
   assert.equal(again.status, 'kesin');
+});
+
+test('salon adı, kapasitesi ve durumu düzenlenir, eşitlemeye gider', () => {
+  const db = freshDb();
+  const { admin, hall } = seed(db);
+  const other = createHall(db, { name: 'Bahçe', capacity: 300 }, admin.id);
+  const updated = updateHall(db, hall.id, { name: 'Kristal Salon', capacity: 750, active: false }, admin.id);
+  assert.equal(updated.name, 'Kristal Salon');
+  assert.equal(updated.capacity, 750);
+  assert.equal(updated.active, 0);
+  assert.throws(() => updateHall(db, other.id, { name: 'Kristal Salon' }, admin.id), /Bu isimde salon var/);
+  const ev = one<{ payload: string }>(db, "SELECT payload FROM sync_outbox WHERE type = 'hall.upserted' ORDER BY seq DESC LIMIT 1");
+  assert.equal(JSON.parse(ev!.payload).name, 'Kristal Salon');
 });
