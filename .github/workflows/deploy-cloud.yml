@@ -33,12 +33,17 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - name: Cloudflare anahtarı kontrolü
+        id: key
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-            echo "::error::CLOUDFLARE_API_TOKEN GitHub gizli değeri tanımlı değil (Settings > Secrets and variables > Actions)."
-            exit 1
+            echo "::warning::CLOUDFLARE_API_TOKEN tanımlı değil, yayın atlandı (Settings > Secrets and variables > Actions)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
           fi
       - name: Veritabanı güncellemeleri (D1)
+        if: steps.key.outputs.ready == 'true'
         run: npm run db:migrate:remote -w @dunyatek/cloud-worker
       - name: Yayınla
+        if: steps.key.outputs.ready == 'true'
         run: npm run deploy -w @dunyatek/cloud-worker
