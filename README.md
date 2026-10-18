@@ -111,6 +111,16 @@ npm run build -w @dunyatek/web && npx wrangler dev --port 8788
 
 Önerilen başlangıç: Intel N100 veya üzeri, 16 GB RAM, 256 GB SSD, kablolu Ethernet, **UPS**.
 
+**Tek dosyayla kurulum (önerilen):** `Dunyatek-Salon-Kurulum-<sürüm>.exe` dosyasını mini PC'de çalıştırın.
+Node.js, Git veya internet gerekmez. Sihirbaz yönetici şifresini, bulut adresini ve eşitleme anahtarını sorar;
+aynı dosya sonraki sürümlerde verileri koruyarak günceller. Kısayollar: masaüstünde "Dünyatek Salon",
+Başlat menüsünde "Şifre sıfırla", "Yedekler klasörü", "Kaldır". Kaldırınca veri, yedek ve ayarlar silinmez.
+
+Kurulum dosyasını üretmek: `npm run kurulum` (NSIS gerekir; çıktı `release/` klasörüne) veya GitHub'da
+Actions > Kurulum dosyası > Artifacts. Farklı klasöre: `npm run kurulum -- --out ..\kurulum`.
+
+**Depodan kurulum (geliştirici):**
+
 1. Node.js 24 LTS ve Git'i kurun, depoyu indirin.
 2. Yönetici PowerShell'de, depo klasöründen:
    ```powershell

@@ -1,0 +1,34 @@
+name: Kurulum dosyası
+
+# Salon tarafı değişince Dunyatek-Salon-Kurulum-<sürüm>.exe derlenir.
+# İndirmek için: Actions > Kurulum dosyası > son çalıştırma > Artifacts.
+on:
+  push:
+    branches: [main, feature/ilk-surum]
+    paths:
+      - 'apps/local-server/**'
+      - 'apps/web/**'
+      - 'packages/**'
+      - 'migrations/local/**'
+      - 'installer/**'
+      - 'scripts/**'
+      - '.github/workflows/build-installer.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: sudo apt-get update -q && sudo apt-get install -y -q nsis
+      - run: npm ci
+      - run: npm run kurulum
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Dunyatek-Salon-Kurulum
+          path: release/*.exe
+          retention-days: 30

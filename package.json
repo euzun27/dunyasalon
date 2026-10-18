@@ -17,7 +17,8 @@
     "sifre": "npm run sifre -w @dunyatek/local-server --",
     "build": "npm run build -w @dunyatek/web && npm run build -w @dunyatek/local-server",
     "typecheck": "tsc -p tsconfig.json && tsc -p apps/cloud-worker/tsconfig.json",
-    "test": "node --import tsx --test --test-reporter=spec \"tests/**/*.test.ts\""
+    "test": "node --import tsx --test --test-reporter=spec \"tests/**/*.test.ts\"",
+    "kurulum": "node scripts/build-installer.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

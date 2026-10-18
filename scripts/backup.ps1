@@ -15,10 +15,13 @@ $serverDir = Join-Path $Root 'app\apps\local-server'
 $env:BACKUP_DIR = Join-Path $Root 'backups'
 $env:BACKUP_KEEP = "$Keep"
 $log = Join-Path $Root 'logs\backup.log'
+# Kurulum.exe ile kurulduysa paketteki node.exe, depodan kurulduysa sistemdeki Node.js
+$node = Join-Path $Root 'app\node\node.exe'
+if (-not (Test-Path $node)) { $node = 'node' }
 
 Push-Location $serverDir
 try {
-  $out = & node --env-file=$envFile dist\backup.mjs 2>&1
+  $out = & $node --env-file=$envFile dist\backup.mjs 2>&1
   $code = $LASTEXITCODE
 } finally {
   Pop-Location
