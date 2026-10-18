@@ -187,6 +187,22 @@ test('tahsilat, menü kalemi ve gider kayıtları buluta eşitlenir', async () =
   const pay = c.d1.db.prepare('SELECT cancelled_at FROM reservation_payments').get() as { cancelled_at: string | null };
   assert.ok(pay.cancelled_at);
   assert.equal(count(c.d1.db, 'SELECT COUNT(*) AS n FROM finance_entries'), 1);
+
+  // Bulut paneli rezervasyon tutarlarını salondakiyle aynı hesaplar
+  addPayment(db, r.id, { kind: 'kapora', method: 'kart', amount_kurus: 1_500_000 }, admin.id);
+  await sync.runOnce();
+  const today = new Date().toISOString().slice(0, 10);
+  const summary = (await (await c.admin(`/summary?date=2027-01-01`)).json()) as {
+    upcoming: { total_kurus: number; paid_kurus: number; balance_kurus: number }[];
+    receivable: { total: number; count: number };
+  };
+  assert.deepEqual(
+    { total: summary.upcoming[0]!.total_kurus, paid: summary.upcoming[0]!.paid_kurus, balance: summary.upcoming[0]!.balance_kurus },
+    { total: 5_000_000, paid: 1_500_000, balance: 3_500_000 },
+  );
+  assert.deepEqual(summary.receivable, { total: 3_500_000, count: 1 });
+  const daily = (await (await c.admin(`/summary?date=${today}`)).json()) as { reservation_payments: { total: number } };
+  assert.equal(daily.reservation_payments.total, 1_500_000);
 });
 
 test('test verileri sıfırlanır: şifre ve onay ister, yedek alır, salonu ve bulutu temizler', async () => {

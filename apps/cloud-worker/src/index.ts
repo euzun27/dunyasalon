@@ -143,10 +143,20 @@ admin.use('*', async (c, next) => {
   await next();
 });
 
+// Rezervasyon tutarları salondaki reservationMoney ile aynı kuralla hesaplanır:
+// toplam = salon ücreti + kalemler − indirim; tahsil = iptal edilmemiş ödemeler − iadeler.
+const RES_MONEY = `
+  SELECT r.*,
+         r.price_kurus - r.discount_kurus
+           + COALESCE((SELECT SUM(i.total_kurus) FROM reservation_items i WHERE i.reservation_id = r.id), 0) AS total_kurus,
+         COALESCE((SELECT SUM(CASE p.kind WHEN 'iade' THEN -p.amount_kurus ELSE p.amount_kurus END)
+                     FROM reservation_payments p WHERE p.reservation_id = r.id AND p.cancelled_at IS NULL), 0) AS paid_kurus
+    FROM reservations r`;
+
 admin.get('/summary', async (c) => {
   const date = c.req.query('date') ?? nowIso().slice(0, 10);
   const db = c.env.DB;
-  const [sales, byMethod, upcoming, lastSync, pendingRequests] = await db.batch([
+  const [sales, byMethod, upcoming, lastSync, pendingRequests, resPayments, receivable] = await db.batch([
     db.prepare(
       "SELECT COUNT(*) AS count, COALESCE(SUM(total_kurus),0) AS total FROM pos_sales WHERE status = 'tamamlandi' AND substr(created_at,1,10) = ?",
     ).bind(date),
@@ -155,12 +165,22 @@ admin.get('/summary', async (c) => {
         WHERE s.status = 'tamamlandi' AND substr(s.created_at,1,10) = ? GROUP BY p.method`,
     ).bind(date),
     db.prepare(
-      `SELECT r.id, r.event_date, r.start_time, r.end_time, r.status, h.name AS hall_name, c.full_name AS customer_name
-         FROM reservations r LEFT JOIN halls h ON h.id = r.hall_id LEFT JOIN customers c ON c.id = r.customer_id
+      `SELECT r.id, r.event_date, r.start_time, r.end_time, r.status, r.event_type, r.guest_count,
+              r.total_kurus, r.paid_kurus, r.total_kurus - r.paid_kurus AS balance_kurus,
+              h.name AS hall_name, c.full_name AS customer_name
+         FROM (${RES_MONEY}) r LEFT JOIN halls h ON h.id = r.hall_id LEFT JOIN customers c ON c.id = r.customer_id
         WHERE r.event_date >= ? AND r.status IN ('opsiyon','kesin','talep') ORDER BY r.event_date, r.start_time LIMIT 20`,
     ).bind(date),
     db.prepare("SELECT origin, MAX(received_at) AS last_received_at FROM sync_events WHERE origin != 'cloud' GROUP BY origin"),
     db.prepare("SELECT COUNT(*) AS n FROM reservation_requests WHERE status = 'bekliyor'"),
+    db.prepare(
+      `SELECT COUNT(*) AS count, COALESCE(SUM(CASE kind WHEN 'iade' THEN -amount_kurus ELSE amount_kurus END), 0) AS total
+         FROM reservation_payments WHERE cancelled_at IS NULL AND substr(created_at,1,10) = ?`,
+    ).bind(date),
+    db.prepare(
+      `SELECT COALESCE(SUM(total_kurus - paid_kurus), 0) AS total, COUNT(*) AS count
+         FROM (${RES_MONEY}) WHERE status IN ('opsiyon','kesin','tamamlandi') AND total_kurus > paid_kurus`,
+    ),
   ]);
   return c.json({
     date,
@@ -169,6 +189,8 @@ admin.get('/summary', async (c) => {
     upcoming: upcoming!.results,
     devices: lastSync!.results,
     pending_requests: (pendingRequests!.results[0] as { n: number }).n,
+    reservation_payments: resPayments!.results[0],
+    receivable: receivable!.results[0],
   });
 });
 
