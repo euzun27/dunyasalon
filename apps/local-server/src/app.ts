@@ -5,6 +5,7 @@ import type { Config } from './config.ts';
 import type { DB } from './database/db.ts';
 import { AuthError, assertRole, createUser, listUsers, login, logout, updateUser, userFromToken, type SessionUser } from './modules/auth.ts';
 import * as products from './modules/products.ts';
+import * as productsImport from './modules/products-import.ts';
 import * as inventory from './modules/inventory.ts';
 import * as pos from './modules/pos.ts';
 import * as accounts from './modules/event-accounts.ts';
@@ -89,6 +90,12 @@ export function createApp(db: DB, config: Config, sync?: SyncEngine) {
   api.post('/products', async (c) => {
     const u = role(c, 'muhasebe');
     return c.json(products.createProduct(db, await c.req.json(), u.id), 201);
+  });
+  api.post('/products/import', async (c) => {
+    const u = role(c, 'muhasebe');
+    const body = await c.req.json<{ rows: productsImport.ImportRow[]; dry_run?: boolean; first_row?: number }>();
+    const firstRow = Number.isInteger(body.first_row) && body.first_row! > 0 ? body.first_row : undefined;
+    return c.json(productsImport.importProducts(db, body.rows, { dryRun: body.dry_run === true, firstRow }, u.id));
   });
   api.put('/products/:id', async (c) => {
     const u = role(c, 'muhasebe');

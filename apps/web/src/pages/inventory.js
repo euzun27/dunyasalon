@@ -1,6 +1,7 @@
 import { api } from '../services/api.js';
 import { esc, tl, qty, parseTL, dateTimeTR, QTY_SCALE } from '../services/format.js';
 import { h, modal, toast, errorToast, emptyRow } from '../ui.js';
+import { readSheet, productRows } from '../services/sheet.js';
 
 const MOVE_LABELS = { giris: 'Giriş', satis: 'Satış', iade: 'İade', sayim: 'Sayım', fire: 'Fire' };
 
@@ -13,7 +14,10 @@ export async function renderInventory(root, { user }) {
         
         <div class="actions">
           <input id="q" class="search" placeholder="Ad veya barkod ara…" />
-          ${canEdit ? '<button class="btn primary" id="new">+ Yeni ürün</button>' : ''}
+          ${canEdit ? `<a class="btn ghost" href="/urun-sablonu.xlsx" download="Dunyatek-urun-sablonu.xlsx">Şablonu indir</a>
+            <button class="btn ghost" id="import">Excel'den yükle</button>
+            <input type="file" id="import-file" accept=".xlsx,.csv" hidden />
+            <button class="btn primary" id="new">+ Yeni ürün</button>` : ''}
         </div>
       </header>
       <div class="card"><table class="table">
@@ -127,6 +131,47 @@ export async function renderInventory(root, { user }) {
     });
   }
 
+  /** Excel/CSV'den toplu ürün: önce önizleme (hiçbir şey kaydedilmez), onaylanınca yükleme. */
+  async function importFile(file) {
+    const { rows, firstRow } = productRows(await readSheet(file));
+    const preview = await api('/products/import', { method: 'POST', body: { rows, first_row: firstRow, dry_run: true } });
+    const valid = preview.created + preview.updated + preview.unchanged;
+    const errors = preview.errors.length
+      ? `<p><strong class="neg">${preview.errors.length} satır yüklenmeyecek:</strong></p>
+         <div class="table-wrap" style="max-height:220px;overflow:auto"><table class="table compact"><thead><tr><th>Satır</th><th>Sorun</th></tr></thead><tbody>${preview.errors
+           .slice(0, 200)
+           .map((e) => `<tr><td>${e.row}</td><td>${esc(e.message)}</td></tr>`)
+           .join('')}</tbody></table></div>`
+      : '';
+    modal({
+      title: `Ürün yükleme · ${file.name}`,
+      wide: true,
+      submitLabel: valid ? `${valid} ürünü yükle` : 'Kapat',
+      body: `
+        <div class="stats">
+          <div class="stat card"><small>Yeni ürün</small><strong>${preview.created}</strong></div>
+          <div class="stat card"><small>Güncellenecek</small><strong>${preview.updated}</strong></div>
+          <div class="stat card"><small>Değişmeyen</small><strong>${preview.unchanged}</strong></div>
+          <div class="stat card"><small>Stok girişi</small><strong>${preview.stock_entries}</strong></div>
+        </div>
+        <p class="muted small">Barkodu aynı olan ürün güncellenir, yeni ürün açılmaz. Stok sütunu doluysa o miktar mevcut stoğa eklenir.
+          Bu ekranda henüz hiçbir şey kaydedilmedi.</p>
+        ${errors}`,
+      onSubmit: async () => {
+        if (!valid) return;
+        const done = await api('/products/import', { method: 'POST', body: { rows, first_row: firstRow } });
+        toast(`${done.created} yeni ürün eklendi, ${done.updated} ürün güncellendi${done.stock_entries ? `, ${done.stock_entries} stok girişi yapıldı` : ''}`);
+        await load();
+      },
+    });
+  }
+
+  $('#import-file')?.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (file) importFile(file).catch(errorToast);
+  });
+
   let t;
   $('#q').addEventListener('input', () => {
     clearTimeout(t);
@@ -136,6 +181,7 @@ export async function renderInventory(root, { user }) {
     const b = e.target.closest('button');
     if (!b) return;
     if (b.id === 'new') productForm();
+    if (b.id === 'import') $('#import-file').click();
     if (b.dataset.edit) productForm(products.find((p) => p.id === b.dataset.edit));
     if (b.dataset.move) moveForm(products.find((p) => p.id === b.dataset.move));
   });
