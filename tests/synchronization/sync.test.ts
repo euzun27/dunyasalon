@@ -1,0 +1,268 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { toQty } from '@dunyatek/shared';
+import worker from '../../apps/cloud-worker/src/index.ts';
+import { completeSale, refundSale } from '../../apps/local-server/src/modules/pos.ts';
+import { createReservation } from '../../apps/local-server/src/modules/reservations.ts';
+import { SyncEngine } from '../../apps/local-server/src/sync/engine.ts';
+import { run, type DB } from '../../apps/local-server/src/database/db.ts';
+import { D1Shim } from '../helpers/d1-shim.ts';
+import { existsSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { recordManualMovement } from '../../apps/local-server/src/modules/inventory.ts';
+import { resetTestData } from '../../apps/local-server/src/modules/reset.ts';
+import { count, freshDb, seed } from '../helpers/setup.ts';
+
+const SYNC_TOKEN = 'test-sync-token';
+const ADMIN_TOKEN = 'test-admin-token';
+
+function cloud() {
+  const d1 = new D1Shim();
+  const env = { DB: d1, SYNC_TOKEN, ADMIN_TOKEN, ASSETS: { fetch: async () => new Response('') } };
+  let online = true;
+  const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (!online) throw new TypeError('fetch failed: internet yok');
+    return worker.fetch(new Request(input, init), env as never);
+  }) as typeof fetch;
+  return {
+    d1,
+    env,
+    fetch: fetchImpl,
+    setOnline(v: boolean) {
+      online = v;
+    },
+    admin: (path: string, init: RequestInit = {}) =>
+      worker.fetch(
+        new Request(`https://dunyasalon.com/api/cloud${path}`, {
+          ...init,
+          headers: { authorization: `Bearer ${ADMIN_TOKEN}`, 'content-type': 'application/json' },
+        }),
+        env as never,
+      ),
+  };
+}
+
+function engine(db: DB, fetchImpl: typeof fetch) {
+  return new SyncEngine(db, {
+    deviceId: 'salon-mini-pc-1',
+    cloudUrl: 'https://dunyasalon.com',
+    cloudToken: SYNC_TOKEN,
+    reservationBufferMinutes: 60,
+    fetch: fetchImpl,
+  });
+}
+
+const retryNow = (db: DB) => run(db, 'UPDATE sync_outbox SET next_attempt_at = NULL');
+const ctx = (userId: string) => ({ userId, terminal: 'KASA-1' });
+
+test('internet kesikken 100 satış kuyrukta bekler, bağlantı gelince buluta birer kez işlenir', async () => {
+  const db = freshDb();
+  const { admin, kola } = seed(db);
+  const c = cloud();
+  const sync = engine(db, c.fetch);
+
+  c.setOnline(false);
+  for (let i = 0; i < 100; i++) {
+    completeSale(db, { lines: [{ product_id: kola.id, qty: toQty(1) }], payments: [{ method: 'nakit', amount_kurus: 4000 }] }, ctx(admin.id));
+  }
+  await sync.runOnce();
+  assert.equal(sync.status().online, false);
+  assert.ok(sync.status().pending >= 100);
+  assert.equal(count(c.d1.db, 'SELECT COUNT(*) AS n FROM pos_sales'), 0);
+
+  c.setOnline(true);
+  retryNow(db);
+  await sync.runOnce();
+  assert.equal(sync.status().pending, 0);
+  assert.equal(count(c.d1.db, 'SELECT COUNT(*) AS n FROM pos_sales'), 100);
+  const stock = c.d1.db.prepare('SELECT qty FROM inventory_balances WHERE product_id = ?').get(kola.id) as { qty: number };
+  assert.equal(stock.qty, toQty(0));
+});
+
+test('aynı olaylar ikinci kez gönderilirse bulutta çift satış/stok oluşmaz', async () => {
+  const db = freshDb();
+  const { admin, kola } = seed(db);
+  const c = cloud();
+  const sync = engine(db, c.fetch);
+  completeSale(db, { lines: [{ product_id: kola.id, qty: toQty(5) }], payments: [{ method: 'kart', amount_kurus: 20000 }] }, ctx(admin.id));
+  await sync.runOnce();
+  const sent = count(c.d1.db, 'SELECT COUNT(*) AS n FROM sync_events');
+
+  // Bulut onayı yerel tarafa ulaşmamış gibi: tüm olayları yeniden gönder.
+  run(db, "UPDATE sync_outbox SET status = 'bekliyor', next_attempt_at = NULL");
+  await sync.runOnce();
+  assert.equal(count(c.d1.db, 'SELECT COUNT(*) AS n FROM sync_events'), sent);
+  assert.equal(count(c.d1.db, 'SELECT COUNT(*) AS n FROM pos_sales'), 1);
+  const stock = c.d1.db.prepare('SELECT qty FROM inventory_balances WHERE product_id = ?').get(kola.id) as { qty: number };
+  assert.equal(stock.qty, toQty(95));
+  assert.equal(sync.status().pending, 0);
+});
+
+test('iade ve düğün hesabı hareketleri buluta yansır', async () => {
+  const db = freshDb();
+  const { admin, kola, hall } = seed(db);
+  const c = cloud();
+  const sync = engine(db, c.fetch);
+  const r = createReservation(
+    db,
+    { hall_id: hall.id, customer_name: 'Ayşe', customer_phone: '0555', event_date: '2027-06-12', start_time: '19:00', end_time: '00:00', status: 'kesin' },
+    { userId: admin.id, bufferMinutes: 60 },
+  );
+  const sale = completeSale(
+    db,
+    { lines: [{ product_id: kola.id, qty: toQty(2) }], payments: [{ method: 'dugun_hesabi', amount_kurus: 8000 }], event_account_id: r.event_account_id },
+    ctx(admin.id),
+  );
+  refundSale(db, sale.id, ctx(admin.id));
+  await sync.runOnce();
+  assert.equal((c.d1.db.prepare('SELECT status FROM pos_sales WHERE id = ?').get(sale.id) as { status: string }).status, 'iade');
+  assert.equal(count(c.d1.db, 'SELECT COUNT(*) AS n FROM event_ledger'), 2);
+  assert.equal(count(c.d1.db, "SELECT COUNT(*) AS n FROM reservations WHERE status = 'kesin'"), 1);
+  const stock = c.d1.db.prepare('SELECT qty FROM inventory_balances WHERE product_id = ?').get(kola.id) as { qty: number };
+  assert.equal(stock.qty, toQty(100));
+
+  // Bulut panelindeki kantin hesabı bakiyesi salondaki "Kantin Hesapları" ekranıyla aynıdır
+  const { addManualEntry, listEventAccounts } = await import('../../apps/local-server/src/modules/event-accounts.ts');
+  completeSale(
+    db,
+    { lines: [{ product_id: kola.id, qty: toQty(3) }], payments: [{ method: 'dugun_hesabi', amount_kurus: 12000 }], event_account_id: r.event_account_id },
+    ctx(admin.id),
+  );
+  addManualEntry(db, r.event_account_id!, { entry_type: 'borc', amount_kurus: 50000, description: 'Ek pasta' }, admin.id);
+  addManualEntry(db, r.event_account_id!, { entry_type: 'alacak', amount_kurus: 20000, description: 'Kantin nakit tahsilat' }, admin.id);
+  await sync.runOnce();
+  const cloudAccounts = (await (await c.admin('/event-accounts?status=acik')).json()) as Record<string, unknown>[];
+  assert.deepEqual(cloudAccounts, JSON.parse(JSON.stringify(listEventAccounts(db, { status: 'acik' }))));
+  assert.deepEqual(
+    { debit: cloudAccounts[0]!.debit_kurus, credit: cloudAccounts[0]!.credit_kurus, balance: cloudAccounts[0]!.balance_kurus },
+    { debit: 70000, credit: 28000, balance: 42000 },
+  );
+  const detail = (await (await c.admin(`/event-accounts/${r.event_account_id}`)).json()) as { ledger: unknown[] };
+  assert.equal(detail.ledger.length, 5);
+});
+
+test('uzaktan alınan rezervasyon talebi yerelde "talep" olarak düşer ve salonu kilitlemez', async () => {
+  const db = freshDb();
+  const { hall } = seed(db);
+  const c = cloud();
+  const sync = engine(db, c.fetch);
+  await sync.runOnce(); // salon bilgisi buluta gitsin
+
+  const res = await c.admin('/reservation-requests', {
+    method: 'POST',
+    body: JSON.stringify({ hall_id: hall.id, customer_name: 'Uzak Müşteri', customer_phone: '0532', event_date: '2027-07-01', start_time: '19:00', end_time: '23:00' }),
+  });
+  assert.equal(res.status, 201);
+  const pulled = await sync.runOnce();
+  assert.equal(pulled.pulled, 1);
+  const local = (db.prepare('SELECT status, source FROM reservations').all() as Array<{ status: string; source: string }>).map((r) => ({ ...r }));
+  assert.deepEqual(local, [{ status: 'talep', source: 'bulut' }]);
+  // Tekrar çekmede aynı talep ikinci kez işlenmez
+  await sync.runOnce();
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM reservations'), 1);
+  // Talep salonu kilitlemez: resepsiyon aynı saate kesin rezervasyon girebilir
+  const kesin = createReservation(
+    db,
+    { hall_id: hall.id, customer_name: 'Salondaki Müşteri', customer_phone: '0544', event_date: '2027-07-01', start_time: '19:00', end_time: '23:00', status: 'kesin' },
+    { userId: null, bufferMinutes: 60 },
+  );
+  assert.equal(kesin.status, 'kesin');
+});
+
+test('yanlış senkron anahtarı reddedilir', async () => {
+  const db = freshDb();
+  seed(db);
+  const c = cloud();
+  const sync = new SyncEngine(db, { deviceId: 'x', cloudUrl: 'https://dunyasalon.com', cloudToken: 'yanlis', reservationBufferMinutes: 60, fetch: c.fetch });
+  await sync.runOnce();
+  assert.equal(sync.status().online, false);
+  assert.match(sync.status().last_error ?? '', /401/);
+  assert.equal(count(c.d1.db, 'SELECT COUNT(*) AS n FROM sync_events'), 0);
+});
+
+test('tahsilat, menü kalemi ve gider kayıtları buluta eşitlenir', async () => {
+  const { saveService } = await import('../../apps/local-server/src/modules/services.ts');
+  const { addItem, addPayment, cancelPayment } = await import('../../apps/local-server/src/modules/reservation-details.ts');
+  const { addEntry } = await import('../../apps/local-server/src/modules/finance.ts');
+  const db = freshDb();
+  const { admin, hall } = seed(db);
+  const c = cloud();
+  const sync = engine(db, c.fetch);
+  const r = createReservation(
+    db,
+    { hall_id: hall.id, customer_name: 'Ayşe', customer_phone: '0555', event_date: '2027-06-12', start_time: '19:00', end_time: '00:00', guest_count: 100, price_kurus: 1_000_000, status: 'kesin' },
+    { userId: admin.id, bufferMinutes: 60 },
+  );
+  const menu = saveService(db, null, { name: 'Menü', kind: 'menu', pricing: 'kisi_basi', price_kurus: 40_000 }, admin.id);
+  addItem(db, r.id, { service_id: menu.id }, admin.id);
+  const p = addPayment(db, r.id, { kind: 'kapora', method: 'nakit', amount_kurus: 500_000 }, admin.id);
+  cancelPayment(db, p.id, 'yanlış', admin.id);
+  addEntry(db, { type: 'gider', category: 'Kira', amount_kurus: 100_000, entry_date: '2027-06-01' }, admin.id);
+  await sync.runOnce();
+  assert.equal(sync.status().pending, 0);
+  const item = c.d1.db.prepare('SELECT total_kurus FROM reservation_items').get() as { total_kurus: number };
+  assert.equal(item.total_kurus, 4_000_000);
+  const pay = c.d1.db.prepare('SELECT cancelled_at FROM reservation_payments').get() as { cancelled_at: string | null };
+  assert.ok(pay.cancelled_at);
+  assert.equal(count(c.d1.db, 'SELECT COUNT(*) AS n FROM finance_entries'), 1);
+
+  // Bulut paneli rezervasyon tutarlarını salondakiyle aynı hesaplar
+  addPayment(db, r.id, { kind: 'kapora', method: 'kart', amount_kurus: 1_500_000 }, admin.id);
+  await sync.runOnce();
+  const today = new Date().toISOString().slice(0, 10);
+  const summary = (await (await c.admin(`/summary?date=2027-01-01`)).json()) as {
+    upcoming: { total_kurus: number; paid_kurus: number; balance_kurus: number }[];
+    receivable: { total: number; count: number };
+  };
+  assert.deepEqual(
+    { total: summary.upcoming[0]!.total_kurus, paid: summary.upcoming[0]!.paid_kurus, balance: summary.upcoming[0]!.balance_kurus },
+    { total: 5_000_000, paid: 1_500_000, balance: 3_500_000 },
+  );
+  assert.deepEqual(summary.receivable, { total: 3_500_000, count: 1 });
+  const daily = (await (await c.admin(`/summary?date=${today}`)).json()) as { reservation_payments: { total: number } };
+  assert.equal(daily.reservation_payments.total, 1_500_000);
+
+  // Patron raporu: buluttaki yıllık rapor salondakiyle aynı sonucu verir
+  const { yearlyReport } = await import('../../apps/local-server/src/modules/reports.ts');
+  const cloudReport = await (await c.admin('/reports/yearly?year=2027')).json();
+  const localReport = JSON.parse(JSON.stringify(await yearlyReport(db, '2027')));
+  assert.deepEqual(cloudReport, localReport);
+  assert.deepEqual(localReport.by_hall, [
+    { hall_name: 'Büyük Salon', count: 1, total: 5_000_000, collected: 1_500_000, guests: 100, remaining: 3_500_000 },
+  ]);
+});
+
+test('test verileri sıfırlanır: şifre ve onay ister, yedek alır, salonu ve bulutu temizler', async () => {
+  process.env.BACKUP_DIR = mkdtempSync(join(tmpdir(), 'sifirlama-'));
+  const db = freshDb();
+  const { admin, kola, hall } = seed(db);
+  const c = cloud();
+  const sync = engine(db, c.fetch);
+  completeSale(db, { lines: [{ product_id: kola.id, qty: toQty(2) }], payments: [{ method: 'nakit', amount_kurus: 8000 }] }, ctx(admin.id));
+  createReservation(db, { hall_id: hall.id, customer_name: 'Ayşe', customer_phone: '05551112233', event_date: '2027-06-12', start_time: '19:00', end_time: '00:00', status: 'kesin' }, { userId: admin.id, bufferMinutes: 60 });
+  await sync.runOnce();
+  assert.equal(count(c.d1.db, 'SELECT COUNT(*) AS n FROM reservations'), 1);
+
+  await assert.rejects(resetTestData(db, { password: 'yanlis', confirm: 'SIFIRLA' }, admin, ':memory:'), /Şifre hatalı/);
+  await assert.rejects(resetTestData(db, { password: 'admin123', confirm: 'evet' }, admin, ':memory:'), /SIFIRLA/);
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM reservations'), 1);
+
+  const r = await resetTestData(db, { password: 'admin123', confirm: 'sıfırla' }, admin, ':memory:');
+  assert.ok(existsSync(r.backup));
+  await sync.resetCloud();
+  for (const t of ['reservations', 'customers', 'pos_sales', 'stock_movements', 'sync_outbox']) {
+    assert.equal(count(db, `SELECT COUNT(*) AS n FROM ${t}`), 0, t);
+  }
+  for (const t of ['reservations', 'customers', 'pos_sales', 'stock_movements']) {
+    assert.equal(count(c.d1.db, `SELECT COUNT(*) AS n FROM ${t}`), 0, `bulut ${t}`);
+  }
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM users'), 1);
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM halls'), 1);
+  assert.equal(count(c.d1.db, 'SELECT COUNT(*) AS n FROM products'), 2);
+  // Sıfırlamadan sonra stok sıfırdır; yeni giriş ve satış normal eşitlenir
+  recordManualMovement(db, { product_id: kola.id, type: 'giris', qty: toQty(10) }, admin.id);
+  completeSale(db, { lines: [{ product_id: kola.id, qty: toQty(1) }], payments: [{ method: 'nakit', amount_kurus: 4000 }] }, ctx(admin.id));
+  await sync.runOnce();
+  assert.equal(count(c.d1.db, 'SELECT COUNT(*) AS n FROM pos_sales'), 1);
+});

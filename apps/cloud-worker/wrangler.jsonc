@@ -1,0 +1,29 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "dunyasalon",
+  // truvapark.com.tr alan adının bulunduğu Cloudflare hesabı
+  "account_id": "76ab792c15a9186c6ba6e6d1d318eb84",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-16",
+  "assets": {
+    "directory": "../web/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "dunyasalon-db",
+      "database_id": "a8b2f282-db6c-44be-84e0-756daa53480d",
+      "migrations_dir": "../../migrations/cloud"
+    }
+  ],
+  // truvapark.com.tr Cloudflare'de Active olana kadar panel workers.dev adresinden de açılır.
+  "workers_dev": true,
+  "routes": [{ "pattern": "panel.truvapark.com.tr", "custom_domain": true }],
+  "observability": { "enabled": true }
+  // Gizli anahtarlar (wrangler secret put ile):
+  //   SYNC_TOKEN  – salon mini PC'sinin senkronizasyon anahtarı
+  //   ADMIN_TOKEN – uzaktan yönetim paneli anahtarı
+}
