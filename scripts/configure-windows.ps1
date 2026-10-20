@@ -109,8 +109,15 @@ for ($i = 0; $i -lt 15 -and -not $ok; $i++) {
 }
 if (-not $ok) { throw "Sunucu başlamadı. Ayrıntı: $logs\server.log" }
 
-$ip = (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-  Where-Object { $_.PrefixOrigin -in 'Manual', 'Dhcp' -and $_.IPAddress -notlike '169.*' } | Select-Object -First 1).IPAddress
+# Ağ geçidi olan gerçek bağlantıyı seç; Hyper-V/WSL (vEthernet) gibi sanal bağdaştırıcılar ağ geçidi taşımaz
+$ip = (Get-NetIPConfiguration -ErrorAction SilentlyContinue |
+  Where-Object { $_.IPv4DefaultGateway -and $_.NetAdapter.Status -eq 'Up' } |
+  Select-Object -First 1).IPv4Address.IPAddress | Select-Object -First 1
+if (-not $ip) {
+  $ip = (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+    Where-Object { $_.PrefixOrigin -in 'Manual', 'Dhcp' -and $_.IPAddress -notlike '169.*' -and $_.InterfaceAlias -notlike 'vEthernet*' } |
+    Select-Object -First 1).IPAddress
+}
 $addr = if ($ip) { "http://$($ip):$Port" } else { "http://<bu bilgisayarın IP adresi>:$Port" }
 "Bu bilgisayarda: http://localhost:$Port`r`nKasa ve resepsiyon bilgisayarlarında: $addr" |
   Set-Content -Encoding UTF8 (Join-Path $Root 'adres.txt')
