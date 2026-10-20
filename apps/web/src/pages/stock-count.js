@@ -22,9 +22,9 @@ export async function renderStockCount(root, { user, setTitle }) {
   const canCreate = ['admin', 'muhasebe'].includes(user.role);
   root.append(
     h(`
-    <div class="page">
+    <div class="page count-page">
       <header class="page-head">
-        <a class="btn ghost" href="#/stok">← Ürün & Stok</a>
+        <a class="btn ghost back" href="#/stok">← Ürün & Stok</a>
         <div class="actions">
           <button class="btn ghost" id="clear">Sayımı temizle</button>
           <button class="btn primary" id="save">Sayımı kaydet</button>
@@ -32,10 +32,13 @@ export async function renderStockCount(root, { user, setTitle }) {
       </header>
       <div class="card count-scan">
         <div class="scan">
-          <input id="code" class="scan-input" placeholder="Barkod okutun veya ürün adı yazıp Enter'a basın…" autocomplete="off" inputmode="search" />
+          <div class="count-input">
+            <input id="code" class="scan-input" placeholder="Barkod okutun veya ürün adı yazıp Enter'a basın…" autocomplete="off" inputmode="search" />
+            <button type="button" class="btn ghost" id="kbd" hidden title="Ekran klavyesini aç/kapat">Klavye</button>
+          </div>
           <div class="count-opts">
             <label>Her okutmada<input id="step" type="number" min="1" value="1" class="qty-input" /> adet ekle</label>
-            <span class="muted small">Koli okuturken adedi koli içi sayısına çevirin. Sayılan miktarı tablodan da düzeltebilirsiniz.</span>
+            <span class="muted small count-help">Koli okuturken adedi koli içi sayısına çevirin. Sayılan miktarı tablodan da düzeltebilirsiniz.</span>
           </div>
         </div>
         <div id="picker"></div>
@@ -43,7 +46,7 @@ export async function renderStockCount(root, { user, setTitle }) {
       </div>
       <div class="stats" id="stats"></div>
       <div class="card"><table class="table">
-        <thead><tr><th>Ürün</th><th>Barkod</th><th class="num">Sistemdeki</th><th class="num">Sayılan</th><th class="num">Fark</th><th></th></tr></thead>
+        <thead><tr><th>Ürün</th><th class="count-bc">Barkod</th><th class="num">Sistemdeki</th><th class="num">Sayılan</th><th class="num">Fark</th><th></th></tr></thead>
         <tbody id="rows"></tbody>
       </table></div>
     </div>`),
@@ -80,11 +83,11 @@ export async function renderStockCount(root, { user, setTitle }) {
             const diff = l.qty - p.stock_qty;
             return `<tr class="${l.id === flashId ? 'flash' : ''}">
               <td>${esc(p.name)}${p.track_stock ? '' : ' <span class="badge">stok takibi kapalı</span>'}</td>
-              <td class="mono">${esc(p.barcode ?? '—')}</td>
+              <td class="mono count-bc">${esc(p.barcode ?? '—')}</td>
               <td class="num">${qty(p.stock_qty)}</td>
               <td class="num"><input class="qty-input" data-qty="${l.id}" inputmode="decimal" value="${qty(l.qty)}" /></td>
               <td class="num ${diff < 0 ? 'neg' : diff > 0 ? 'qty-in' : 'muted'}">${diff > 0 ? '+' : ''}${qty(diff)}</td>
-              <td class="row-actions"><button class="btn ghost small" data-remove="${l.id}">Çıkar</button></td>
+              <td class="row-actions"><button class="btn ghost small" data-remove="${l.id}" title="Çıkar"><span class="count-rm-txt">Çıkar</span><span class="count-rm-x">✕</span></button></td>
             </tr>`;
           })
           .join('')
@@ -240,6 +243,19 @@ export async function renderStockCount(root, { user, setTitle }) {
       });
     }
   });
+
+  // El terminali (dokunmatik): okuyucu klavye gibi yazar, ekran klavyesi ekranı kapatmasın.
+  // Ürün adı yazmak gerektiğinde "Klavye" düğmesi ekran klavyesini açar.
+  if (matchMedia('(pointer: coarse)').matches) {
+    input.inputMode = 'none';
+    $('#kbd').hidden = false;
+    $('#kbd').addEventListener('click', () => {
+      input.inputMode = input.inputMode === 'none' ? 'search' : 'none';
+      $('#kbd').classList.toggle('active', input.inputMode !== 'none');
+      input.blur();
+      input.focus();
+    });
+  }
 
   // Okuyucu her zaman okutma kutusuna yazsın: ekrana tıklanınca ya da odak boştayken tuşa basılınca kutuya dön
   root.addEventListener('click', (e) => {

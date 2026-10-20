@@ -530,3 +530,22 @@ legend { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; 
 .count-last.warn { background: var(--warn-soft); color: var(--text); }
 tr.flash td { animation: count-flash 1.2s ease-out; }
 @keyframes count-flash { from { background: var(--ok-soft); } to { background: transparent; } }
+.count-input { display: flex; gap: 0.5rem; }
+.count-input .scan-input { flex: 1; min-width: 0; }
+.count-rm-x { display: none; }
+#kbd.active { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
+@media (max-width: 600px) {
+  .count-page { gap: 0.6rem; }
+  .count-page .page-head { flex-wrap: nowrap; gap: 0.4rem; }
+  .count-page .page-head .back { display: none; }
+  .count-page .page-head .actions { flex-wrap: nowrap; width: 100%; }
+  .count-page .page-head .actions .btn { flex: 1; padding-inline: 0.5rem; }
+  .count-page .count-help, .count-page .count-bc { display: none; }
+  .count-page .scan-input { font-size: 1.1rem; padding: 0.65rem 0.8rem; }
+  .count-page .stats { grid-template-columns: repeat(3, 1fr); gap: 0.4rem; }
+  .count-page .stats .stat { padding: 0.5rem 0.6rem; }
+  .count-page .table td, .count-page .table th { padding-inline: 0.35rem; }
+  .count-page .qty-input { width: 4rem; }
+  .count-page .count-rm-txt { display: none; }
+  .count-page .count-rm-x { display: inline; }
+}
