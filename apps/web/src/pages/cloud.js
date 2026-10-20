@@ -148,4 +148,10 @@ export async function renderCloud(root) {
     if (row) showAccount(row.dataset.acc).catch(errorToast);
   });
   await load().catch(errorToast);
+  // Salondan gelen satış ve tahsilatlar telefonda elle yenilemeden görünsün
+  const timer = setInterval(() => {
+    if (document.hidden || document.querySelector('.modal-backdrop')) return;
+    load().catch(() => {});
+  }, 15_000);
+  return () => clearInterval(timer);
 }
