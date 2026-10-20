@@ -166,6 +166,8 @@ export async function renderStockCount(root, { user, setTitle }) {
     const q = term.toLocaleLowerCase('tr');
     const found = products.filter((p) => p.name.toLocaleLowerCase('tr').includes(q)).slice(0, 12);
     if (found.length === 1) return add(found[0]);
+    // Boşluksuz ve rakam içeren okutma (ör. "ENFIKS-203K") ada uymuyorsa harfli barkod kabul edilir
+    if (!found.length && !/\s/.test(term) && /\d/.test(code) && code.length >= 4) return unknown(code);
     if (!found.length) {
       beep(false);
       $('#picker').innerHTML = '';
