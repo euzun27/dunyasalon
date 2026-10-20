@@ -520,3 +520,13 @@ legend { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; 
 @media (prefers-color-scheme: dark) {
   .login-brand img { filter: brightness(0) invert(1); }
 }
+
+/* --- barkodla sayım --- */
+.count-scan { display: flex; flex-direction: column; gap: 0.75rem; }
+.count-opts { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: center; }
+.count-opts label { display: flex; flex-direction: row; align-items: center; gap: 0.4rem; }
+.count-last { padding: 0.6rem 0.8rem; border-radius: var(--radius-sm); background: var(--surface-2); }
+.count-last.ok { background: var(--ok-soft); color: var(--text); }
+.count-last.warn { background: var(--warn-soft); color: var(--text); }
+tr.flash td { animation: count-flash 1.2s ease-out; }
+@keyframes count-flash { from { background: var(--ok-soft); } to { background: transparent; } }

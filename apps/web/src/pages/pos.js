@@ -1,6 +1,6 @@
 import { api } from '../services/api.js';
 import { esc, tl, qty, parseTL, METHOD_LABELS, QTY_SCALE } from '../services/format.js';
-import { h, toast, errorToast, modal } from '../ui.js';
+import { h, toast, errorToast, modal, beep } from '../ui.js';
 
 /**
  * Kantin kasası. Barkod okuyucular klavye gibi çalışır: rakamları yazar ve Enter gönderir.
@@ -309,20 +309,4 @@ export async function renderPos(root) {
   await Promise.all([loadProducts().catch(errorToast), loadCashSession(), loadLastSales()]);
   input.focus();
   return () => window.removeEventListener('keydown', onKey);
-}
-
-let audio;
-function beep(ok) {
-  try {
-    audio ??= new AudioContext();
-    const o = audio.createOscillator();
-    const g = audio.createGain();
-    o.frequency.value = ok ? 1200 : 300;
-    g.gain.value = 0.05;
-    o.connect(g).connect(audio.destination);
-    o.start();
-    o.stop(audio.currentTime + (ok ? 0.06 : 0.25));
-  } catch {
-    /* ses desteklenmiyor */
-  }
 }

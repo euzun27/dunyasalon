@@ -107,3 +107,38 @@ export function listMovements(db: DB, productId?: string, limit = 200): Array<Mo
     ...params,
   );
 }
+
+export interface CountReport {
+  counted: number;
+  changed: number;
+  unchanged: number;
+}
+
+/**
+ * Barkodla sayımın kaydı: her ürünün stoğu sayılan miktara eşitlenir (tek işlem).
+ * Sayılmayan ürünlere dokunulmaz; sayılanla sistemdeki aynıysa hareket yazılmaz.
+ */
+export function recordStockCount(db: DB, items: Array<{ product_id: string; qty: number }>, userId: string | null): CountReport {
+  if (!Array.isArray(items) || items.length === 0) throw new ValidationError('Sayılan ürün yok');
+  if (items.length > 5000) throw new ValidationError('Bir seferde en fazla 5000 ürün kaydedilebilir');
+  const ids = new Set<string>();
+  for (const it of items) {
+    if (ids.has(it.product_id)) throw new ValidationError('Aynı ürün sayımda iki kez var');
+    ids.add(it.product_id);
+  }
+  return tx(db, () => {
+    const report: CountReport = { counted: items.length, changed: 0, unchanged: 0 };
+    for (const it of items) {
+      if (!one(db, 'SELECT id FROM products WHERE id = ?', it.product_id)) throw new NotFoundError('Ürün bulunamadı');
+      const qty = requireInt(it.qty, 'Sayılan miktar', { min: 0 });
+      const bal = one<{ qty: number }>(db, 'SELECT qty FROM inventory_balances WHERE product_id = ?', it.product_id)?.qty ?? 0;
+      if (qty === bal) {
+        report.unchanged++;
+        continue;
+      }
+      recordManualMovement(db, { product_id: it.product_id, type: 'sayim', qty, note: 'Barkodla sayım' }, userId);
+      report.changed++;
+    }
+    return report;
+  });
+}

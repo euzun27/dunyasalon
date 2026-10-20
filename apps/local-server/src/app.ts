@@ -108,6 +108,11 @@ export function createApp(db: DB, config: Config, sync?: SyncEngine) {
     const u = role(c, 'muhasebe', 'kasiyer');
     return c.json(inventory.recordManualMovement(db, await c.req.json(), u.id), 201);
   });
+  api.post('/stock/count', async (c) => {
+    const u = role(c, 'muhasebe', 'kasiyer');
+    const body = await c.req.json<{ items: Array<{ product_id: string; qty: number }> }>();
+    return c.json(inventory.recordStockCount(db, body.items, u.id));
+  });
 
   // --- Kantin POS ---
   api.post('/pos/sales', async (c) => {

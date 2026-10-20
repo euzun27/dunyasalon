@@ -14,6 +14,7 @@ export async function renderInventory(root, { user }) {
         
         <div class="actions">
           <input id="q" class="search" placeholder="Ad veya barkod ara…" />
+          <a class="btn ghost" href="#/stok/sayim">Barkodla sayım</a>
           ${canEdit ? `<a class="btn ghost" href="/urun-sablonu.xlsx" download="Dunyatek-urun-sablonu.xlsx">Şablonu indir</a>
             <button class="btn ghost" id="import">Excel'den yükle</button>
             <input type="file" id="import-file" accept=".xlsx,.csv" hidden />

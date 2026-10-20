@@ -7,6 +7,7 @@ import { renderLogin } from './pages/login.js';
 import { renderHome } from './pages/home.js';
 import { renderPos } from './pages/pos.js';
 import { renderInventory } from './pages/inventory.js';
+import { renderStockCount } from './pages/stock-count.js';
 import { renderReservations } from './pages/reservations.js';
 import { renderReservationDetail } from './pages/reservation-detail.js';
 import { renderCustomers, renderCustomerDetail } from './pages/customers.js';
@@ -52,10 +53,11 @@ const NAV = [
   { group: 'Yönetim', items: [{ path: '/ayarlar', label: 'Ayarlar', icon: 'settings', render: renderSettings, roles: [] }] },
 ];
 
-// Menüde görünmeyen ayrıntı sayfaları: #/rezervasyon/:id, #/musteri/:id
+// Menüde görünmeyen ayrıntı sayfaları: #/rezervasyon/:id, #/musteri/:id, #/stok/sayim
 const DETAIL_ROUTES = [
   { pattern: /^\/rezervasyon\/([\w-]+)$/, parent: '/rezervasyon', render: renderReservationDetail, roles: ['resepsiyon', 'muhasebe'] },
   { pattern: /^\/musteri\/([\w-]+)$/, parent: '/musteriler', render: renderCustomerDetail, roles: ['resepsiyon', 'muhasebe'] },
+  { pattern: /^\/stok\/sayim$/, parent: '/stok', render: renderStockCount, roles: ['kasiyer', 'muhasebe'] },
 ];
 
 let mode = 'local';

@@ -68,3 +68,20 @@ export function modal({ title, body, submitLabel = 'Kaydet', onSubmit, onCancel,
 export function emptyRow(cols, text) {
   return `<tr><td colspan="${cols}" class="empty">${esc(text)}</td></tr>`;
 }
+
+/** Barkod okutmada duyulur geri bildirim: kısa ince ses = bulundu, uzun kalın ses = bulunamadı. */
+let audio;
+export function beep(ok) {
+  try {
+    audio ??= new AudioContext();
+    const o = audio.createOscillator();
+    const g = audio.createGain();
+    o.frequency.value = ok ? 1200 : 300;
+    g.gain.value = 0.05;
+    o.connect(g).connect(audio.destination);
+    o.start();
+    o.stop(audio.currentTime + (ok ? 0.06 : 0.25));
+  } catch {
+    /* ses desteklenmiyor */
+  }
+}
